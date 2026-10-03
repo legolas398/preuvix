@@ -1,0 +1,61 @@
+.capture-protocol {
+  padding: 18px;
+  border: 1px solid #e7cdb8;
+  border-radius: 14px;
+  background: #fff8f0;
+}
+.capture-protocol video {
+  width: 100%;
+  max-height: 380px;
+  background: #241e1a;
+  border-radius: 10px;
+}
+.capture-protocol ol {
+  padding-left: 22px;
+  font-size: 13px;
+  line-height: 1.8;
+}
+.capture-protocol p {
+  font-size: 12px;
+  color: #6e5142;
+}
+.capture-protocol .button {
+  white-space: normal;
+}
+.capture-check {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  font-size: 13px;
+  line-height: 1.5;
+}
+.capture-check input {
+  width: 18px;
+  height: 18px;
+  flex-shrink: 0;
+  accent-color: #a9431c;
+}
+.capture-declaration {
+  margin: 20px 0;
+  padding: 16px;
+  border: 1px solid #e7cdb8;
+  border-radius: 12px;
+}
+.capture-declaration p {
+  font-size: 12px;
+}
+.capture-evidence {
+  padding: 18px;
+  margin: 18px 0;
+  border: 1px solid #e7cdb8;
+  border-radius: 12px;
+  background: #fff8f0;
+}
+.capture-evidence p {
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}
+.detail-image video {
+  width: 100%;
+  max-height: 420px;
+}

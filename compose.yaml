@@ -1,0 +1,22 @@
+services:
+  preuvix:
+    build: .
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      NODE_ENV: production
+      HOST: 0.0.0.0
+      DATA_DIR: /app/data
+      COOKIE_SECURE: 'true'
+    ports:
+      - '127.0.0.1:3000:3000'
+    volumes:
+      - preuvix-data:/app/data
+      - ./trust:/app/trust:ro
+    mem_limit: 768m
+    pids_limit: 100
+    security_opt:
+      - no-new-privileges:true
+
+volumes:
+  preuvix-data:

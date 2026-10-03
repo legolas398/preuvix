@@ -1,0 +1,72 @@
+:root {
+  --font-body: 'Outfit', sans-serif;
+  --font-display: 'Syne', sans-serif;
+}
+body,
+.welcome,
+.welcome-loading,
+button,
+input,
+select,
+textarea {
+  font-family: var(--font-body);
+}
+h1,
+h2,
+h3,
+.welcome h1,
+.welcome h2,
+.welcome h3,
+.partner-heading h3,
+.partner-card h4 {
+  font-family: var(--font-display);
+  font-weight: 700;
+  letter-spacing: -0.035em;
+  text-wrap: balance;
+}
+.welcome p,
+.partner-directory p {
+  line-height: 1.8;
+}
+button,
+input,
+select,
+textarea {
+  font-family: inherit;
+}
+.welcome .welcome-brand,
+.welcome-loading,
+.welcome-loading h1 {
+  font-family: var(--font-display);
+}
+.welcome .hero-copy h1 {
+  font-size: clamp(38px, 5.1vw, 70px);
+  line-height: 1.06;
+  letter-spacing: -0.055em;
+  font-weight: 700;
+}
+.welcome h1 em, .welcome h2 em, .welcome h3 em, .partner-heading em {
+  font-style: normal;
+  font-weight: inherit;
+}
+.welcome .hero-copy h1 em {
+  text-decoration: underline;
+  text-decoration-thickness: 0.055em;
+  text-underline-offset: 0.12em;
+  text-decoration-color: var(--w-accent);
+}
+.welcome .welcome-brand { font-weight: 700; letter-spacing: -0.06em; }
+.welcome-kicker, .eyebrow, .demo-document-top {
+  font-family: ui-monospace, 'Cascadia Code', Consolas, monospace;
+  letter-spacing: 0.09em;
+}
+.welcome .section-heading h2, .welcome .connection-section h2 {
+  font-size: clamp(28px, 3.2vw, 38px);
+  line-height: 1.2;
+}
+.partner-map-toolbar h4 { font-weight: 700; font-size: 25px; letter-spacing: -0.035em; }
+.demo-real-document { font-family: var(--font-body); line-height: 1.8; }
+@media (max-width: 600px) {
+  .welcome .hero-copy h1 { font-size: clamp(36px, 10.5vw, 52px); }
+  .welcome h2, .welcome h3, .partner-map-toolbar h4 { overflow-wrap: anywhere; }
+}

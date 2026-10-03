@@ -1,0 +1,7 @@
+node_modules
+dist
+.tools
+data
+test-results
+plan.md
+package-lock.json

@@ -1,0 +1,14 @@
+[
+  {
+    "id": "exemple-non-publie",
+    "name": "EXEMPLE — Remplacer par une étude confirmée",
+    "city": "Paris",
+    "departments": ["75"],
+    "services": ["Constat immobilier", "Constat internet"],
+    "description": "Exemple de fiche de configuration, à remplacer par une description approuvée par le partenaire.",
+    "website": "https://example.invalid/",
+    "directoryUrl": "https://annuaire.commissaire-justice.fr/fiche-a-remplacer",
+    "published": false,
+    "partnershipConfirmed": false
+  }
+]
