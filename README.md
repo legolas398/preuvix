@@ -41,7 +41,9 @@ npm run build
 - Import JPEG/PNG/WebP (10 Mo, 40 mégapixels maximum), caméra via `getUserMedia`, refus des images invalides et animées.
 - Octets reçus conservés sans transformation, SHA-256 côté serveur, manifeste JSON figé avec titre, contexte, origine déclarée et métadonnées techniques.
 - Empreinte SHA-256 calculée dans le navigateur avant l'envoi et affichée dans le formulaire. Le serveur refait le calcul et refuse le dépôt si les empreintes diffèrent. L'API de dépôt exige maintenant le champ `clientSha256` ; recharger les anciens onglets après mise à jour.
-- Inspection limitée de métadonnées pour indices déclaratifs d'outils IA. **Aucun détecteur fiable « réel/faux » ni validation C2PA.** Un marqueur peut être falsifié et son absence ne prouve rien.
+- Validation réelle des signatures C2PA (Content Credentials) des appareils compatibles : intégrité, signataire (liste de confiance via `C2PA_TRUST_ANCHORS`) et type de source déclaré. Une signature de confiance déclarant une capture numérique donne le statut « signature d'appareil vérifiée » ; une signature cassée ou une génération IA déclarée impose un examen.
+- Défi en direct à la capture (code et geste aléatoires, 180 s) et vérifications visuelles signées séparément.
+- Inspection limitée de métadonnées pour indices déclaratifs d'outils IA. **Aucun détecteur visuel « réel/faux ».** Un marqueur peut être falsifié et son absence ne prouve rien.
 - Jetons RFC 3161 via OpenSSL : empreinte, nonce, chaîne, usage du certificat, politique et signataire épinglé. Échec du prestataire : fichier conservé en attente, nouvelle tentative explicite.
 - Rapport PDF, QR lorsqu'un partage est activé, ZIP contenant original, manifeste exact, historique, rapport et requête/réponse RFC 3161 si disponibles.
 - Partage volontaire par jeton aléatoire de 192 bits, révocable. La page publique ne révèle pas le titre, la photo, le nom original, la description ou la géolocalisation. Elle révèle les empreintes, l'identifiant et le reçu d'horodatage.

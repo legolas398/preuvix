@@ -86,7 +86,11 @@ test('capture commitment is authenticated, immutable, session-bound and included
     assert.equal(proof.manifest.capture.committedAt, committed.committedAt);
     assert.equal(proof.status, 'pending');
     assert.equal(proof.receipt, null);
-    assert.equal(proof.manifest.certification.status, 'capture_documented');
+    assert.equal(proof.manifest.certification.policy, 'preuvix-media-v2');
+    assert.equal(proof.manifest.certification.status, 'capture_challenged');
+    assert.match(proof.manifest.capture.challenge.code, /^[A-Z0-9]{4}$/);
+    assert.ok(proof.manifest.capture.elapsedSeconds <= proof.manifest.capture.challenge.maxSeconds);
+    assert.equal(proof.manifest.provenance.contentCredentials.state, 'absent');
     assert.equal(proof.manifest.certification.aiAuthenticity, 'not_established');
     const original = store.get(proof.id)!;
     assert.ok(
@@ -108,6 +112,21 @@ test('capture commitment is authenticated, immutable, session-bound and included
     );
     await deposit().expect(200);
     await deposit(bytes, randomUUID()).expect(409);
+    await owner
+      .post(`/api/proofs/${proof.id}/review`)
+      .set('Origin', origin)
+      .send({ outcome: 'maybe', reviewer: 'Témoin' })
+      .expect(400);
+    const reviewed = (
+      await owner
+        .post(`/api/proofs/${proof.id}/review`)
+        .set('Origin', origin)
+        .send({ outcome: 'confirmed', reviewer: 'Témoin indépendant', note: 'Code lisible' })
+        .expect(201)
+    ).body;
+    assert.equal(reviewed.reviews.length, 1);
+    assert.equal(reviewed.reviews[0].review.manifestHash, proof.manifestHash);
+    assert.throws(() => store.db.prepare("UPDATE reviews SET payload='{}'").run());
     const exported = await owner
       .get(`/api/proofs/${proof.id}/export`)
       .buffer(true)
@@ -128,6 +147,7 @@ test('capture commitment is authenticated, immutable, session-bound and included
       windowsHide: true,
     });
     assert.match(result, /signature verified/);
+    assert.match(result, /Challenge review verified: confirmed/);
     writeFileSync(path.join(directory, 'original.jpeg'), 'tampered');
     assert.throws(() =>
       execFileSync(process.execPath, ['scripts/verify-export.mjs', directory], {

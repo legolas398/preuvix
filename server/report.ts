@@ -7,6 +7,9 @@ const safeText = (text: string) =>
   text
     .normalize('NFKD')
     .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[\u2018\u2019]/g, "'")
+    .replace(/[\u00ab\u00bb\u201c\u201d]/g, '"')
+    .replace(/[\u00a0\u202f]/g, ' ')
     .replace(/[^\x20-\x7e\n]/g, '?');
 
 export async function makeReport(proof: Proof, origin: string) {
@@ -69,12 +72,36 @@ export async function makeReport(proof: Proof, origin: string) {
       line(
         `${check.result === 'passed' ? 'Controle' : check.result === 'review' ? 'A examiner' : 'Non etabli'} : ${check.detail}`,
       );
-    line('Evaluation incluse dans le manifeste signe. Absence d IA non etablie.');
+    line(`Politique : ${proof.manifest.certification.policy}`);
+    line(
+      proof.manifest.certification.aiAuthenticity === 'camera_provenance_verified'
+        ? 'Evaluation incluse dans le manifeste signe. Origine materielle attestee par la signature de l appareil ; la mise en scene reste possible.'
+        : 'Evaluation incluse dans le manifeste signe. Absence d IA non etablie.',
+    );
   }
+  const credentials = proof.manifest.provenance.contentCredentials;
+  if (credentials && credentials.state !== 'absent') {
+    line(`Content Credentials (C2PA) : ${credentials.state}`);
+    if (credentials.signer)
+      line(
+        `Signataire : ${credentials.signer.commonName ?? '?'} / emetteur ${credentials.signer.issuer ?? '?'} / ${credentials.signer.time ?? 'date non signee'}`,
+      );
+    if (credentials.claimGenerator) line(`Generateur declare : ${credentials.claimGenerator}`);
+    if (credentials.digitalSourceTypes.length)
+      line(`Type de source declare : ${credentials.digitalSourceTypes.join(', ')}`);
+  }
+  for (const { review } of proof.reviews ?? [])
+    line(
+      `Verification visuelle du defi (${review.reviewedAt}) par ${review.reviewer}, nom declare : ${review.outcome === 'confirmed' ? 'defi visible et conforme' : review.outcome === 'absent' ? 'defi absent ou non conforme' : 'defi illisible ou incertain'}${review.note ? ` - ${review.note}` : ''}. Signee separement (Ed25519).`,
+    );
   if (proof.manifest.capture) {
     const capture = proof.manifest.capture;
     line(`Session serveur : ${capture.id}`);
     line(`Defi aleatoire : ${capture.nonce}`);
+    if (capture.challenge)
+      line(
+        `Defi en direct a montrer dans l image : code ${capture.challenge.code}, geste "${capture.challenge.gesture}". Engagement ${capture.elapsedSeconds ?? '?'} s apres emission (limite ${capture.challenge.maxSeconds} s).`,
+      );
     line(`Ouverture serveur : ${capture.issuedAt}`);
     line(`Engagement de l'empreinte recu par le serveur : ${capture.committedAt}`);
     line(`Debut / fin declares par le navigateur : ${capture.startedAt} / ${capture.endedAt}`);

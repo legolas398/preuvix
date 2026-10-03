@@ -29,6 +29,31 @@ if (
   throw new Error('Invalid attestation');
 if (process.argv[3] && readFileSync(process.argv[3]).toString() !== publicKey)
   throw new Error('Signer differs from independently trusted key');
+let reviews = [];
+try {
+  reviews = JSON.parse(read('reviews.json'));
+} catch (error) {
+  if (error.code !== 'ENOENT') throw error;
+}
+for (const review of reviews) {
+  const content = JSON.parse(review.payload);
+  if (
+    content.type !== 'preuvix-challenge-review-v1' ||
+    content.proofId !== manifest.id ||
+    content.manifestHash !== attestation.manifestHash ||
+    hash(review.publicKey) !== review.keyId ||
+    !verify(
+      null,
+      Buffer.from(review.payload),
+      review.publicKey,
+      Buffer.from(review.signature, 'base64'),
+    )
+  )
+    throw new Error('Invalid challenge review');
+  console.log(
+    `Challenge review verified: ${content.outcome} by ${content.reviewer} (declared name) at ${content.reviewedAt}.`,
+  );
+}
 console.log('Original SHA-256 and Ed25519 manifest signature verified.');
 console.log(
   process.argv[3]

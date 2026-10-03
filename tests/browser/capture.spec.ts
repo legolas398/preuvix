@@ -48,8 +48,10 @@ test('guided photo and video capture commit hashes, preserve declared context an
     expect(proof.manifest.capture.sha256).toBe(proof.manifest.file.sha256);
     expect(proof.manifest.declaration.author).toBe('Auteur de test');
     expect(proof.attestation.algorithm).toBe('Ed25519');
-    expect(proof.manifest.certification.status).toBe('capture_documented');
-    await expect(page.getByRole('region', { name: 'Processus de certification' })).toContainText('Aucun certificat « sans IA »');
+    expect(proof.manifest.certification.status).toBe('capture_challenged');
+    await expect(page.getByRole('region', { name: 'Processus de certification' })).toContainText(
+      'Aucun certificat « sans IA »',
+    );
     await expect(page.getByLabel('Attestation technique')).toContainText('Manifeste signé');
     if (kind === 'video') await expect(page.locator('.detail-image video')).toBeVisible();
     const download = page.waitForEvent('download');

@@ -59,3 +59,54 @@
   width: 100%;
   max-height: 420px;
 }
+.capture-challenge {
+  display: grid;
+  gap: 4px;
+  margin: 12px 0;
+  padding: 14px;
+  border: 2px dashed #a9431c;
+  border-radius: 12px;
+  background: #fff;
+  text-align: center;
+  font-size: 13px;
+  color: #6e5142;
+}
+.capture-challenge strong {
+  font-size: 34px;
+  letter-spacing: 0.3em;
+  color: #241e1a;
+}
+.challenge-review fieldset {
+  display: grid;
+  gap: 8px;
+  margin: 12px 0;
+  padding: 12px;
+  border: 1px solid #e7cdb8;
+  border-radius: 10px;
+}
+.challenge-review label {
+  margin: 4px 0;
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  flex-wrap: wrap;
+  font-size: 13px;
+}
+.challenge-review input:not([type='radio']) {
+  flex: 1;
+  min-width: 0;
+}
+.challenge-review label.choice {
+  display: flex;
+  flex-direction: row;
+  justify-content: flex-start;
+  font-weight: 500;
+}
+.challenge-review label.choice input {
+  width: 18px;
+  height: 18px;
+  margin: 0;
+  padding: 0;
+  flex: none;
+  accent-color: #a9431c;
+}

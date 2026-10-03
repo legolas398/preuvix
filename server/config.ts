@@ -1,3 +1,4 @@
+import { readFileSync } from 'node:fs';
 import path from 'node:path';
 
 export type Config = ReturnType<typeof readConfig>;
@@ -71,8 +72,16 @@ export function readConfig(env: NodeJS.ProcessEnv = process.env) {
     throw new Error(
       'Qualified launch gate: configure the RFC 3161 service, pinned signer, policy, CA and a current trusted-list review.',
     );
+  // PEM bundle of C2PA trust anchors (e.g. the official C2PA trust list). Without it,
+  // camera signatures are checked for integrity but signers are never reported as trusted.
+  const c2paTrustAnchors = env.C2PA_TRUST_ANCHORS
+    ? readFileSync(path.resolve(env.C2PA_TRUST_ANCHORS), 'utf8')
+    : '';
+  if (c2paTrustAnchors && !c2paTrustAnchors.includes('-----BEGIN CERTIFICATE-----'))
+    throw new Error('C2PA_TRUST_ANCHORS must point to a PEM certificate bundle.');
   return {
     origin,
+    c2paTrustAnchors,
     password,
     production,
     secureCookies,

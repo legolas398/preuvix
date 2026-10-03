@@ -16,8 +16,10 @@ import { readPartners } from './partners';
 import { createBilling } from './billing';
 import type Stripe from 'stripe';
 import { certification } from './certification';
+import { reviewOutcomes } from '../shared/capture';
 import { assessCertification } from '../shared/certification-policy';
 import { inspectMedia } from './media';
+import { validateContentCredentials } from './c2pa';
 
 export function createApp(
   config: Config,
@@ -148,6 +150,7 @@ export function createApp(
       algorithm: 'Ed25519',
       publicKey: certificates.publicKey,
       keyId: certificates.keyId,
+      retired: certificates.retiredKeys,
       scope: 'Signature technique de cette installation, identité non vérifiée par un tiers.',
     }),
   );
@@ -344,6 +347,11 @@ export function createApp(
     } catch (error) {
       return void res.status(400).json({ error: (error as Error).message });
     }
+    const contentCredentials = await validateContentCredentials(
+      req.file.buffer,
+      inspected.mime,
+      config.c2paTrustAnchors,
+    );
     // Recheck after asynchronous image decoding: another request may have completed.
     if (existingResponse()) return;
     if (capture && (capture.kind === 'video') !== inspected.mime.startsWith('video/'))
@@ -387,7 +395,7 @@ export function createApp(
           ? { durationSeconds: inspected.durationSeconds as number }
           : {}),
       },
-      provenance: inspected.provenance,
+      provenance: { ...inspected.provenance, contentCredentials },
     };
     manifest.certification = assessCertification(manifest);
     store.insert(manifest, req.file.buffer, requestKey, certificates.attest(manifest));
@@ -421,6 +429,36 @@ export function createApp(
           'Horodatage non obtenu ou non vérifiable. Le fichier reste conservé. Réessayez plus tard.',
       });
     }
+  });
+  app.post('/api/proofs/:id/review', (req, res) => {
+    const row = store.get(req.params.id);
+    if (!row) return void res.status(404).json({ error: 'Dossier introuvable.' });
+    const manifest: Manifest = JSON.parse(row.manifest);
+    if (!manifest.capture?.challenge)
+      return void res.status(409).json({ error: 'Ce dossier ne comporte aucun défi en direct.' });
+    const parsed = z
+      .object({
+        outcome: z.enum(reviewOutcomes),
+        reviewer: z.string().trim().min(2).max(120),
+        note: z.string().trim().max(1000).default(''),
+      })
+      .strict()
+      .safeParse(req.body);
+    if (!parsed.success)
+      return void res
+        .status(400)
+        .json({ error: 'Résultat, nom du vérificateur ou note invalide.' });
+    store.addReview(
+      row.id,
+      certificates.signReview({
+        type: 'preuvix-challenge-review-v1',
+        proofId: row.id,
+        manifestHash: row.manifest_hash,
+        ...parsed.data,
+        reviewedAt: new Date().toISOString(),
+      }),
+    );
+    res.status(201).json(store.summary(store.get(row.id)!));
   });
   app.post('/api/proofs/:id/share', (req, res) => {
     const row = store.get(req.params.id);
@@ -488,9 +526,12 @@ export function createApp(
             'signer-public.pem': strToU8(proof.attestation.publicKey),
           }
         : {}),
+      ...(proof.reviews?.length
+        ? { 'reviews.json': strToU8(JSON.stringify(proof.reviews, null, 2)) }
+        : {}),
       'rapport.pdf': await makeReport(proof, config.origin),
       'LISEZ-MOI.txt': strToU8(
-        'ATTESTATION TECHNIQUE\nLa signature Ed25519 couvre les octets exacts de manifest.json, pas le PDF.\nVerifier avec une cle publique obtenue independamment :\nopenssl pkeyutl -verify -pubin -inkey signer-public.pem -rawin -in manifest.json -sigfile manifest.sig\nLa cle fournie dans ce ZIP ne prouve pas a elle seule l identite du signataire.\nCette signature auto-generee n est pas une signature qualifiee eIDAS.\n\n' +
+        'ATTESTATION TECHNIQUE\nLa signature Ed25519 couvre les octets exacts de manifest.json, pas le PDF.\nVerifier avec une cle publique obtenue independamment :\nopenssl pkeyutl -verify -pubin -inkey signer-public.pem -rawin -in manifest.json -sigfile manifest.sig\nLa cle fournie dans ce ZIP ne prouve pas a elle seule l identite du signataire.\nreviews.json (si present) : verifications visuelles du defi en direct, chacune signee separement (champ payload).\nCette signature auto-generee n est pas une signature qualifiee eIDAS.\n\n' +
           "PREUVIX — Dossier technique\nLe manifeste est fourni dans ses octets exacts : ne pas le reformater avant verification.\nComparer le SHA-256 de l'original a manifest.json, puis celui du manifeste au jeton.\nLe fichier manifest.sha256 est une aide, pas une ancre de confiance.\nAvec OpenSSL et une chaine de confiance obtenue independamment :\nopenssl ts -verify -data manifest.json -in timestamp.tsr -CAfile trusted-ca.pem\nopenssl ts -verify -queryfile timestamp.tsq -in timestamp.tsr -CAfile trusted-ca.pem\nLa qualification eIDAS exige la verification du service dans la liste de confiance a la date du jeton.\nSans timestamp.tsr : aucun horodatage independant.\nCe dossier n'atteste ni la realite de la scene ni l'absence d'IA.\nL'original peut contenir des metadonnees personnelles.\n",
       ),
     };

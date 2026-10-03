@@ -33,6 +33,7 @@ import {
 } from 'lucide-react';
 import type { AppConfig, Proof, PublicProof } from '../shared/types';
 import { certificationLabels } from '../shared/certification-policy';
+import ChallengeReview from './ChallengeReview';
 import { HEIF_MESSAGE, MAX_PHOTO_BYTES, photoFormat } from '../shared/photo-format';
 import { sha256File } from './file-hash';
 import LocalFileCheck from './LocalFileCheck';
@@ -1044,12 +1045,26 @@ function ProofDetail({
               ))}
             </ol>
             <p>
-              Cette évaluation est incluse dans le manifeste signé. Aucun certificat « sans IA »
-              n’est délivré. En présence d’indices, faites examiner l’original et son contexte avant
-              de vous fier à la scène.
+              {proof.manifest.certification.aiAuthenticity === 'camera_provenance_verified'
+                ? 'Cette évaluation est incluse dans le manifeste signé. La signature de l’appareil atteste une capture matérielle ; une mise en scène ou un écran photographié restent possibles.'
+                : 'Cette évaluation est incluse dans le manifeste signé. Aucun certificat « sans IA » n’est délivré. En présence d’indices, faites examiner l’original et son contexte avant de vous fier à la scène.'}
             </p>
           </section>
         )}
+        <ChallengeReview
+          proof={proof}
+          busy={busy}
+          submit={(input) =>
+            act(async () =>
+              onChange(
+                await api(`/api/proofs/${proof.id}/review`, {
+                  method: 'POST',
+                  body: JSON.stringify(input),
+                }),
+              ),
+            )
+          }
+        />
         <h3>Attestation technique et protection du dossier</h3>
         <p>
           {proof.attestation
@@ -1128,9 +1143,7 @@ function ProofDetail({
           </ul>
         )}
         <p>{proof.manifest.provenance.explanation}</p>
-        {proof.manifest.provenance.credentialsDetected && (
-          <p>Un marqueur C2PA a été repéré. Sa signature n’a pas été validée.</p>
-        )}
+        <ContentCredentialsSummary proof={proof} />
       </section>
       <section className="detail-section">
         <h3>
@@ -1546,6 +1559,52 @@ function About({ config }: { config: AppConfig }) {
           </a>
         </div>
       </section>
+    </>
+  );
+}
+
+const credentialStates = {
+  absent: 'Aucune signature d’appareil (C2PA)',
+  unsupported: 'Validation C2PA non disponible pour ce format',
+  invalid: 'Signature C2PA invalide — fichier modifié après signature',
+  valid_untrusted: 'Signature C2PA intègre — signataire non reconnu',
+  trusted: 'Signature C2PA intègre — signataire de confiance',
+};
+
+function ContentCredentialsSummary({ proof }: { proof: Proof }) {
+  const credentials = proof.manifest.provenance.contentCredentials;
+  if (!credentials)
+    return proof.manifest.provenance.credentialsDetected ? (
+      <p>Un marqueur C2PA a été repéré. Sa signature n’a pas été validée (dossier antérieur).</p>
+    ) : null;
+  return (
+    <>
+      <span
+        className={`provenance-label ${credentials.state === 'invalid' || credentials.aiDeclared ? 'signal' : ''}`}
+      >
+        {credentialStates[credentials.state]}
+      </span>
+      {credentials.state !== 'absent' && credentials.state !== 'unsupported' && (
+        <ul>
+          {credentials.signer && (
+            <li>
+              Signataire : {credentials.signer.commonName ?? '?'} · émetteur{' '}
+              {credentials.signer.issuer ?? '?'}
+              {credentials.signer.time && ` · ${date(credentials.signer.time)}`}
+            </li>
+          )}
+          {credentials.claimGenerator && <li>Générateur : {credentials.claimGenerator}</li>}
+          {credentials.digitalSourceTypes.length > 0 && (
+            <li>
+              Source déclarée : {credentials.digitalSourceTypes.join(', ')}
+              {credentials.aiDeclared && ' — contenu synthétique ou IA déclaré'}
+            </li>
+          )}
+          {credentials.failures.length > 0 && (
+            <li>Anomalies : {credentials.failures.join(', ')}</li>
+          )}
+        </ul>
+      )}
     </>
   );
 }

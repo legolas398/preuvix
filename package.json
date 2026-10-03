@@ -9,6 +9,7 @@
   },
   "scripts": {
     "setup": "node scripts/setup.mjs",
+    "key:rotate": "node scripts/rotate-key.mjs",
     "timestamp:check": "tsx scripts/check-timestamp.ts",
     "dev": "tsx watch server/index.ts",
     "build": "tsc --noEmit && vite build",
@@ -20,6 +21,7 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "@contentauth/c2pa-node": "^0.9.9",
     "@fontsource/manrope": "^5.3.0",
     "@fontsource/newsreader": "^5.3.0",
     "@fontsource/outfit": "^5.3.0",

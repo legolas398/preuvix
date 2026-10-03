@@ -33,6 +33,19 @@ export default function CapturePanel({
   const [audio, setAudio] = useState(false);
   const [attempt, setAttempt] = useState(0);
   const [seconds, setSeconds] = useState(0);
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    const interval = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(interval);
+  }, []);
+  const remaining = session?.challenge
+    ? Math.max(
+        0,
+        Math.round(
+          (Date.parse(session.issuedAt) + session.challenge.maxSeconds * 1000 - now) / 1000,
+        ),
+      )
+    : 0;
   useEffect(() => {
     alive.current = true;
     let cancelled = false;
@@ -192,8 +205,9 @@ export default function CapturePanel({
     <div className="capture-protocol">
       <span className="eyebrow">CAPTURE DOCUMENTÉE · PHOTO / VIDÉO</span>
       <ol>
-        <li>Cadrez les faits et leur contexte, sans filtre.</li>
-        <li>Photographiez ou filmez jusqu’à 60 secondes.</li>
+        <li>Écrivez le code du défi sur un papier et préparez le geste demandé.</li>
+        <li>Cadrez les faits avec le papier et le geste visibles, sans filtre.</li>
+        <li>Photographiez ou filmez (60 s maximum) avant la fin du compte à rebours.</li>
         <li>
           L’empreinte est engagée auprès du serveur, puis vous décrivez et déposez le fichier.
         </li>
@@ -208,6 +222,18 @@ export default function CapturePanel({
         />{' '}
         Inclure le son (permission microphone)
       </label>
+      {session?.challenge && (
+        <section className="capture-challenge" aria-label="Défi en direct">
+          <span>DÉFI EN DIRECT · à montrer dans l’image</span>
+          <strong>{session.challenge.code}</strong>
+          <span>{session.challenge.gesture}</span>
+          <span>
+            {remaining > 0
+              ? `Temps restant : ${Math.floor(remaining / 60)}:${String(remaining % 60).padStart(2, '0')}`
+              : 'Délai dépassé : le défi ne sera pas reconnu. Recommencez la session.'}
+          </span>
+        </section>
+      )}
       {session && (
         <p className="capture-session">
           Session ouverte : {new Date(session.issuedAt).toLocaleTimeString('fr-FR')} · défi{' '}
@@ -250,7 +276,7 @@ export default function CapturePanel({
             Terminer la vidéo
           </button>
         )}
-        {error && (
+        {(error || (session?.challenge && remaining === 0)) && (
           <button
             className="button secondary"
             disabled={busy || recording}

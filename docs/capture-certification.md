@@ -2,24 +2,53 @@
 
 Le protocole accepte une photo (JPEG, PNG, WebP, 10 Mo) ou une vidéo (MP4/WebM, 50 Mo, 120 s, 3840 × 2160 maximum). La caméra du navigateur produit une photo JPEG ou un enregistrement de 60 s maximum. Le microphone est désactivé par défaut. HTTPS ou localhost est nécessaire pour la caméra et le SHA-256 ; l’adresse réseau HTTP ne permet pas ces fonctions.
 
-1. L’utilisateur connecté ouvre la caméra. Le serveur émet une session aléatoire liée à sa connexion, valable dix minutes.
+1. L’utilisateur connecté ouvre la caméra. Le serveur émet une session aléatoire liée à sa connexion, valable dix minutes, et un **défi en direct** : un code de 4 caractères et un geste tirés au hasard. Le code doit être écrit à la main et montré dans l’image avec le geste, et l’empreinte doit être engagée dans les 180 secondes.
 2. Le navigateur encode le média, calcule son SHA-256 et engage cette empreinte auprès du serveur. Cet engagement est immuable et idempotent. Les dates du navigateur sont explicitement déclaratives ; la date de réception du serveur n’est pas un horodatage indépendant.
 3. Le déposant relit le média, ajoute le contexte et, facultativement, une déclaration de bonne foi avec un auteur déclaré. L’identité n’est pas vérifiée. Le dépôt doit avoir lieu dans les 24 heures de l’engagement.
 4. Le serveur recalcule l’empreinte, vérifie la session et décode le média. Il conserve les octets reçus sans conversion, fige le manifeste et signe ses octets exacts avec Ed25519. Un import reçoit aussi une attestation d’intégrité, mais sans attestation de session de capture.
 5. Si un prestataire RFC 3161 est configuré, le manifeste est soumis à l’horodatage existant. Sinon le statut reste « en attente ». Aucune date qualifiée n’est inventée.
 6. Le PDF imprimable décrit les contrôles, les déclarations, les empreintes, la signature et les limites. Le ZIP contient l’original, le manifeste exact, sa signature, la clé publique, l’attestation JSON, le PDF et, si obtenu, le jeton d’horodatage.
 
+## Défi en direct
+
+Un média préparé à l’avance, ou généré, ne peut pas contenir un code tiré au hasard quelques secondes avant sa capture. Le défi (code, geste, délai entre l’émission et l’engagement) est figé dans le manifeste signé. Si l’engagement intervient dans le délai, le dossier reçoit le statut `capture_challenged`. Sa présence dans l’image reste à **vérifier visuellement** : dans le dossier, un vérificateur indique « visible et conforme », « absent ou non conforme » ou « illisible ». Chaque vérification est signée séparément (Ed25519, `preuvix-challenge-review-v1`), liée à l’empreinte du manifeste, conservée en ajout seul et exportée dans `reviews.json`. Le nom du vérificateur est déclaré, pas authentifié. La vérification d’un tiers indépendant a plus de poids que celle du déposant.
+
+Limites : une génération IA en temps réel pilotée par un opérateur, une caméra virtuelle ou un écran filmé peuvent reproduire un défi. Le défi élève le coût d’une falsification ; il ne l’exclut pas.
+
+## Signatures d’appareil C2PA
+
+Certains appareils (Leica, Sony, Nikon, Canon, Google Pixel, Samsung récents…) signent chaque prise de vue avec une clé matérielle (Content Credentials, C2PA). Chaque dépôt est validé avec la bibliothèque officielle `@contentauth/c2pa-node`, sans réseau : ni manifeste distant ni OCSP.
+
+| Résultat          | Signification                                                                         | Effet                                                      |
+| ----------------- | ------------------------------------------------------------------------------------- | ---------------------------------------------------------- |
+| `trusted`         | Signature et liaisons intactes, signataire chaîné à une ancre de `C2PA_TRUST_ANCHORS` | `camera_signed` si la source déclarée est `digitalCapture` |
+| `valid_untrusted` | Intact, mais signataire inconnu ou aucune ancre configurée                            | Aucun gain de statut                                       |
+| `invalid`         | Fichier modifié après signature ou manifeste corrompu                                 | `review_required`                                          |
+| IA déclarée       | `trainedAlgorithmicMedia`, `compositeWithTrainedAlgorithmicMedia`…                    | `review_required`                                          |
+
+Pour activer la confiance, télécharger la liste de confiance C2PA officielle (PEM) et renseigner son chemin dans `C2PA_TRUST_ANCHORS`. Sans ancre, aucun signataire n’est présenté comme de confiance. La caméra du navigateur ne produit pas de C2PA : ce statut concerne les imports depuis un appareil compatible. Une signature d’appareil atteste l’origine matérielle, pas la scène : un écran ou une mise en scène photographiés restent possibles.
+
+## Politique `preuvix-media-v2`
+
+Statuts, du plus fort au plus faible : `camera_signed` (signature d’appareil de confiance), `capture_challenged` (session et défi dans le délai), `capture_documented` (session sans défi valable), `integrity_only` (import). `review_required` l’emporte dès qu’un indice IA, une signature C2PA invalide ou une IA déclarée apparaît. `aiAuthenticity` vaut `camera_provenance_verified` uniquement pour `camera_signed` ; sinon `not_established`. Les dossiers `preuvix-media-v1` restent lisibles sans modification.
+
+## Gestion de la clé
+
+- Clé Ed25519 auto-générée dans `DATA_DIR/attestation-ed25519.pem` (mode 600). Sauvegarder confidentiellement avec les données ; ne jamais la publier.
+- Publication : l’empreinte (`keyId`, SHA-256 de la clé publique PEM) est servie sur `/api/certification/key`. La publier aussi par un canal indépendant (site, courrier, acte) pour que `scripts/verify-export.mjs dossier cle.pem` puisse établir le signataire.
+- Rotation (annuelle, ou immédiate si compromission) : arrêter le serveur, lancer `npm run key:rotate`, redémarrer, publier la nouvelle empreinte. L’ancienne clé publique est ajoutée à `retired-keys.json` et exposée dans `retired` ; la clé privée archivée doit être détruite en cas de compromission. Les anciens dossiers restent vérifiables : chaque attestation embarque sa clé publique.
+
 ## Vérification indépendante
 
-Extraire le ZIP puis exécuter `node scripts/verify-export.mjs chemin-du-dossier`. Un troisième argument facultatif désigne une clé publique obtenue par un canal de confiance. Le script vérifie les octets de l’original et la signature du manifeste, mais pas le jeton RFC 3161. Pour ce dernier, suivre le fichier LISEZ-MOI dans le ZIP avec une chaîne de confiance indépendante.
+Extraire le ZIP puis exécuter `node scripts/verify-export.mjs chemin-du-dossier`. Un troisième argument facultatif désigne une clé publique obtenue par un canal de confiance. Le script vérifie les octets de l’original, la signature du manifeste et les vérifications de défi signées, mais pas le jeton RFC 3161. Pour ce dernier, suivre le fichier LISEZ-MOI dans le ZIP avec une chaîne de confiance indépendante.
 
 La signature porte sur `manifest.json`, pas sur le PDF. La clé est auto-générée pour cette installation, dans `DATA_DIR/attestation-ed25519.pem`. Sauvegarder cette clé de manière confidentielle avec les données ; ne jamais la publier. La clé publique et son empreinte sont disponibles sur `/api/certification/key`. Une clé incluse dans un ZIP ne prouve pas, à elle seule, l’identité de son signataire. Ce mécanisme n’est ni un certificat d’identité émis par un tiers ni une signature qualifiée eIDAS.
 
 ## IA et examen contradictoire
 
-Les métadonnées d’image et les tags du conteneur et des flux vidéo sont examinés comme indices non authentifiés. Ils peuvent être absents, modifiés ou falsifiés. Leur présence ne suffit pas à conclure à une génération IA et leur absence ne prouve pas une scène réelle. Aucun détecteur visuel ou audio IA, validation C2PA, reconnaissance faciale, note de crédibilité ni exclusion automatique selon un indice IA n’est effectué.
+Les métadonnées d’image et les tags du conteneur et des flux vidéo sont examinés comme indices non authentifiés. Ils peuvent être absents, modifiés ou falsifiés. Leur présence ne suffit pas à conclure à une génération IA et leur absence ne prouve pas une scène réelle. Aucun détecteur visuel ou audio IA, reconnaissance faciale, note de crédibilité ni exclusion automatique selon un indice IA n’est effectué : ces détecteurs sont contournables par recompression et se périment à chaque nouveau générateur.
 
-Chaque nouveau dépôt reçoit une évaluation `preuvix-media-v1`, figée dans le manifeste avant signature et affichée dans le dossier et le PDF. Un indice reconnu ou un marqueur C2PA impose le statut `review_required` (examen recommandé, sans rejet du dépôt). Sinon, une session de capture vérifiée donne `capture_documented`, et un import `integrity_only`. Dans tous les cas, `aiAuthenticity` reste `not_established`. Les anciens manifestes ne sont pas modifiés. Le statut d’horodatage reste indépendant et ne transforme pas cette évaluation en certificat « sans IA ».
+L’évaluation `preuvix-media-v2` est figée dans le manifeste avant signature et affichée dans le dossier et le PDF. `review_required` recommande un examen, sans rejeter le dépôt. Le statut d’horodatage reste indépendant et ne transforme pas cette évaluation en certificat « sans IA ».
 
 Une caméra virtuelle, une injection dans le navigateur, une scène mise en scène ou un écran filmé restent possibles. L’engagement lie une session à une empreinte, sans attester un capteur physique. Le serveur et sa clé demeurent sous le contrôle de l’exploitant. Une expertise humaine ou un constat peut compléter le dossier selon l’enjeu.
 

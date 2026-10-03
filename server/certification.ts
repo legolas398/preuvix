@@ -4,6 +4,7 @@ import {
   createPublicKey,
   sign,
   randomBytes,
+  randomInt,
   randomUUID,
 } from 'node:crypto';
 import { readFileSync, writeFileSync } from 'node:fs';
@@ -16,7 +17,32 @@ import {
   type CaptureRecord,
   type CaptureSession,
   type Attestation,
+  type ChallengeReview,
+  type LivenessChallenge,
+  type SignedReview,
 } from '../shared/capture';
+
+// Unambiguous characters: easy to handwrite and read back on a photo.
+const CODE_ALPHABET = 'ACDEFHJKMNPRTUVWXY3479';
+const GESTURES = [
+  'Montrez 1 doigt levé',
+  'Montrez 2 doigts levés',
+  'Montrez 3 doigts levés',
+  'Montrez 4 doigts levés',
+  'Montrez la main ouverte',
+  'Montrez le poing fermé',
+  'Montrez le pouce levé',
+];
+export const CHALLENGE_MAX_SECONDS = 180;
+
+export function newChallenge(): LivenessChallenge {
+  const code = Array.from({ length: 4 }, () => CODE_ALPHABET[randomInt(CODE_ALPHABET.length)]);
+  return {
+    code: code.join(''),
+    gesture: GESTURES[randomInt(GESTURES.length)],
+    maxSeconds: CHALLENGE_MAX_SECONDS,
+  };
+}
 
 export function certification(store: Store, directory: string) {
   const keyPath = path.join(directory, 'attestation-ed25519.pem');
@@ -39,6 +65,13 @@ export function certification(store: Store, directory: string) {
   if (privateKey.asymmetricKeyType !== 'ed25519') throw new Error('Invalid attestation key.');
   const publicKey = createPublicKey(privateKey).export({ type: 'spki', format: 'pem' }).toString();
   const keyId = hash(publicKey);
+  // Public keys retired by scripts/rotate-key.mjs: older dossiers still verify against them.
+  let retiredKeys: { keyId: string; publicKey: string; retiredAt: string }[] = [];
+  try {
+    retiredKeys = JSON.parse(readFileSync(path.join(directory, 'retired-keys.json'), 'utf8'));
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error;
+  }
   store.db.exec(
     'CREATE TABLE IF NOT EXISTS capture_sessions (id TEXT PRIMARY KEY, owner TEXT NOT NULL, session TEXT NOT NULL, record TEXT);',
   );
@@ -57,6 +90,7 @@ export function certification(store: Store, directory: string) {
       nonce: randomBytes(16).toString('hex'),
       issuedAt: new Date().toISOString(),
       expiresAt: new Date(Date.now() + 10 * 60000).toISOString(),
+      challenge: newChallenge(),
     };
     store.db
       .prepare('INSERT INTO capture_sessions VALUES (?,?,?,NULL)')
@@ -86,11 +120,13 @@ export function certification(store: Store, directory: string) {
     const session: CaptureSession = JSON.parse(row.session);
     if (Date.now() > Date.parse(session.expiresAt))
       throw new Error('Session expirée. Recommencez la capture.');
+    const committedAt = new Date();
     const record: CaptureRecord = {
       ...session,
       ...payload,
-      committedAt: new Date().toISOString(),
+      committedAt: committedAt.toISOString(),
       assurance: 'browser_declared_server_committed',
+      elapsedSeconds: Math.round((committedAt.getTime() - Date.parse(session.issuedAt)) / 1000),
     };
     store.db
       .prepare('UPDATE capture_sessions SET record=? WHERE id=?')
@@ -118,5 +154,16 @@ export function certification(store: Store, directory: string) {
       scope: 'manifest_bytes',
     };
   }
-  return { issue, commit, resolve, attest, publicKey, keyId };
+  // A review is signed separately: the deposit manifest stays immutable.
+  function signReview(review: ChallengeReview): SignedReview {
+    const payload = JSON.stringify(review);
+    return {
+      payload,
+      review,
+      signature: sign(null, Buffer.from(payload), privateKey).toString('base64'),
+      keyId,
+      publicKey,
+    };
+  }
+  return { issue, commit, resolve, attest, signReview, publicKey, keyId, retiredKeys };
 }

@@ -3,7 +3,7 @@ import { mkdirSync } from 'node:fs';
 import path from 'node:path';
 import type { Manifest, Proof, TimestampReceipt } from '../shared/types';
 import { hash } from './integrity';
-import type { Attestation } from '../shared/capture';
+import type { Attestation, SignedReview } from '../shared/capture';
 import { verify } from 'node:crypto';
 
 type Row = {
@@ -40,6 +40,9 @@ export class Store {
         BEGIN SELECT RAISE(ABORT, 'Original and manifest are immutable'); END;
       CREATE TABLE IF NOT EXISTS sessions (hash TEXT PRIMARY KEY, expires INTEGER NOT NULL);
       CREATE TABLE IF NOT EXISTS attestations (proof_id TEXT PRIMARY KEY REFERENCES proofs(id) ON DELETE CASCADE, payload TEXT NOT NULL);
+      CREATE TABLE IF NOT EXISTS reviews (proof_id TEXT NOT NULL REFERENCES proofs(id) ON DELETE CASCADE, payload TEXT NOT NULL);
+      CREATE TRIGGER IF NOT EXISTS append_only_reviews BEFORE UPDATE ON reviews
+        BEGIN SELECT RAISE(ABORT, 'Reviews are append-only'); END;
     `);
   }
   summary(row: Row): Proof {
@@ -61,6 +64,27 @@ export class Store {
         ))
     )
       throw new Error('Attestation integrity mismatch');
+    const reviews = (
+      this.db
+        .prepare('SELECT payload FROM reviews WHERE proof_id=? ORDER BY rowid')
+        .all(row.id) as { payload: string }[]
+    ).map(({ payload }) => {
+      const signed: SignedReview = JSON.parse(payload);
+      if (
+        signed.keyId !== hash(signed.publicKey) ||
+        JSON.stringify(signed.review) !== signed.payload ||
+        signed.review.proofId !== row.id ||
+        signed.review.manifestHash !== row.manifest_hash ||
+        !verify(
+          null,
+          Buffer.from(signed.payload),
+          signed.publicKey,
+          Buffer.from(signed.signature, 'base64'),
+        )
+      )
+        throw new Error('Review integrity mismatch');
+      return signed;
+    });
     return {
       id: row.id,
       manifest: JSON.parse(row.manifest),
@@ -70,6 +94,7 @@ export class Store {
       events: JSON.parse(row.events),
       shareToken: row.share_token,
       attestation,
+      reviews,
     };
   }
   list(): Proof[] {
@@ -142,6 +167,23 @@ export class Store {
     this.db
       .prepare("UPDATE proofs SET status='timestamped',receipt=?,tsq=?,tsr=?,events=? WHERE id=?")
       .run(JSON.stringify(receipt), query, response, JSON.stringify(events), id);
+  }
+  addReview(id: string, review: SignedReview) {
+    const row = this.get(id);
+    if (!row) return;
+    const events = [
+      ...JSON.parse(row.events),
+      { at: review.review.reviewedAt, kind: 'challenge_reviewed' },
+    ];
+    this.db.exec('BEGIN IMMEDIATE');
+    try {
+      this.db.prepare('INSERT INTO reviews VALUES (?,?)').run(id, JSON.stringify(review));
+      this.db.prepare('UPDATE proofs SET events=? WHERE id=?').run(JSON.stringify(events), id);
+      this.db.exec('COMMIT');
+    } catch (error) {
+      this.db.exec('ROLLBACK');
+      throw error;
+    }
   }
   share(id: string, token: string | null) {
     this.db.prepare('UPDATE proofs SET share_token=? WHERE id=?').run(token, id);

@@ -4,6 +4,17 @@ export type Provenance = {
   signals: string[];
   credentialsDetected: boolean;
   explanation: string;
+  contentCredentials?: ContentCredentials;
+};
+
+// Result of a real C2PA signature validation (not a marker search).
+export type ContentCredentials = {
+  state: 'absent' | 'invalid' | 'valid_untrusted' | 'trusted' | 'unsupported';
+  signer: { issuer: string | null; commonName: string | null; time: string | null } | null;
+  claimGenerator: string | null;
+  digitalSourceTypes: string[];
+  aiDeclared: boolean;
+  failures: string[];
 };
 
 export type Manifest = {
@@ -50,6 +61,7 @@ export type Proof = {
   events: { at: string; kind: string }[];
   shareToken: string | null;
   attestation?: Attestation;
+  reviews?: import('./capture').SignedReview[];
 };
 
 export type PublicProof = {
