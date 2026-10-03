@@ -58,6 +58,61 @@ test('public partner directory publishes only confirmed studies and fails closed
   writeFileSync(file, JSON.stringify([{ ...partner, published: false }]));
   await request(f.app).get('/api/partners').expect(200, { partners: [] });
 });
+test('community spaces publish only confirmed members, expose the contact and fail closed', async () => {
+  const f = fixture();
+  await request(f.app).get('/api/community').expect(200, { members: [], contact: null });
+  const member = {
+    id: 'test-association',
+    space: 'associations',
+    name: 'Association fictive de test',
+    area: 'Lyon',
+    description: 'Fiche de test, aucun partenariat réel.',
+    topics: ['Logement'],
+    website: 'https://example.invalid/',
+    published: true,
+    partnershipConfirmed: true,
+  };
+  const file = path.join(f.config.dataDir, 'community.json');
+  writeFileSync(
+    file,
+    JSON.stringify([
+      member,
+      { ...member, id: 'draft', published: false },
+      { ...member, id: 'unconfirmed', partnershipConfirmed: false },
+    ]),
+  );
+  const response = await request(f.app).get('/api/community').expect(200);
+  assert.deepEqual(
+    response.body.members.map((m: { id: string }) => m.id),
+    ['test-association'],
+  );
+  assert.equal('partnershipConfirmed' in response.body.members[0], false);
+  for (const invalid of [
+    [{ ...member, website: 'javascript:alert(1)' }],
+    [{ ...member, space: 'unknown' }],
+    [member, member],
+  ]) {
+    writeFileSync(file, JSON.stringify(invalid));
+    await request(f.app).get('/api/community').expect(503);
+  }
+  const withContact = createApp(
+    readConfig({
+      OWNER_PASSWORD: password,
+      APP_ORIGIN: origin,
+      DATA_DIR: f.config.dataDir,
+      COMMUNITY_CONTACT_EMAIL: 'partenaires@example.org',
+    }),
+    f.store,
+  );
+  writeFileSync(file, JSON.stringify([member]));
+  assert.equal(
+    (await request(withContact).get('/api/community').expect(200)).body.contact,
+    'partenaires@example.org',
+  );
+  assert.throws(() =>
+    readConfig({ OWNER_PASSWORD: password, COMMUNITY_CONTACT_EMAIL: 'not an email' }),
+  );
+});
 function fixture(timestamp?: TimestampService) {
   const directory = mkdtempSync(path.join(tmpdir(), 'preuvix-test-'));
   directories.push(directory);

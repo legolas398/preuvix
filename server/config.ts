@@ -79,9 +79,18 @@ export function readConfig(env: NodeJS.ProcessEnv = process.env) {
     : '';
   if (c2paTrustAnchors && !c2paTrustAnchors.includes('-----BEGIN CERTIFICATE-----'))
     throw new Error('C2PA_TRUST_ANCHORS must point to a PEM certificate bundle.');
+  // Address shown on the public "Devenir partenaire" link. Optional.
+  const communityContact = env.COMMUNITY_CONTACT_EMAIL || '';
+  if (communityContact && !/^[^\s@<>"]+@[^\s@<>"]+\.[^\s@<>"]+$/.test(communityContact))
+    throw new Error('Invalid COMMUNITY_CONTACT_EMAIL.');
   return {
     origin,
     c2paTrustAnchors,
+    communityContact,
+    // TrustMark models (~65 MB), downloaded on first use if absent.
+    trustmarkModelDir: path.resolve(
+      env.TRUSTMARK_MODEL_DIR || path.join(env.DATA_DIR || './data', 'models', 'trustmark'),
+    ),
     password,
     production,
     secureCookies,

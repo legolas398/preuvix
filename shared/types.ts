@@ -62,6 +62,27 @@ export type Proof = {
   shareToken: string | null;
   attestation?: Attestation;
   reviews?: import('./capture').SignedReview[];
+  watermarked?: boolean;
+  recipientLinks?: RecipientLink[];
+};
+
+// Private, revocable link giving a recipient (e.g. a commissaire de justice) read access.
+export type RecipientLink = {
+  id: string;
+  label: string;
+  createdAt: string;
+  expiresAt: string;
+  revokedAt: string | null;
+  views: number;
+  lastViewAt: string | null;
+};
+
+// What the recipient page receives: no owner-only controls, no tokens.
+export type RecipientDossier = {
+  proof: Omit<Proof, 'shareToken' | 'recipientLinks' | 'events'>;
+  label: string;
+  expiresAt: string;
+  integrity: { originalMatches: boolean; manifestMatches: boolean };
 };
 
 export type PublicProof = {

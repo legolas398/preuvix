@@ -34,6 +34,11 @@ import {
 import type { AppConfig, Proof, PublicProof } from '../shared/types';
 import { certificationLabels } from '../shared/certification-policy';
 import ChallengeReview from './ChallengeReview';
+import { shortId } from '../shared/format';
+import { api } from './api';
+import ProtectionPanel from './ProtectionPanel';
+import RecipientLinks from './RecipientLinks';
+import RecipientPage from './RecipientPage';
 import { HEIF_MESSAGE, MAX_PHOTO_BYTES, photoFormat } from '../shared/photo-format';
 import { sha256File } from './file-hash';
 import LocalFileCheck from './LocalFileCheck';
@@ -42,21 +47,6 @@ import PartnerDirectory from './PartnerDirectory';
 import BillingPanel from './BillingPanel';
 import CapturePanel from './CapturePanel';
 
-async function api<T>(url: string, options: RequestInit = {}): Promise<T> {
-  const res = await fetch(url, {
-    ...options,
-    headers: {
-      ...(options.body && !(options.body instanceof FormData)
-        ? { 'Content-Type': 'application/json' }
-        : {}),
-      ...options.headers,
-    },
-  });
-  if (res.status === 204) return undefined as T;
-  const body = await res.json();
-  if (!res.ok) throw new Error(body.error || 'La requête a échoué.');
-  return body;
-}
 const date = (value: string) =>
   new Intl.DateTimeFormat('fr-FR', {
     dateStyle: 'medium',
@@ -65,7 +55,6 @@ const date = (value: string) =>
   }).format(new Date(value));
 const size = (bytes: number) =>
   `${(bytes / 1024 / 1024).toLocaleString('fr-FR', { maximumFractionDigits: 1 })} Mo`;
-const shortId = (id: string) => `PRX-${id.slice(0, 8).toUpperCase()}`;
 
 function Brand() {
   return (
@@ -143,7 +132,9 @@ export default function App() {
       .then(setConfig)
       .catch((e) => setError(e.message));
   }, []);
+  const recipientToken = window.location.pathname.match(/^\/dossier\/([a-f0-9]{64})$/)?.[1];
   if (token) return <PublicVerification token={token} />;
+  if (recipientToken) return <RecipientPage token={recipientToken} />;
   if (error)
     return (
       <div className="loading-page">
@@ -1145,6 +1136,11 @@ function ProofDetail({
         <p>{proof.manifest.provenance.explanation}</p>
         <ContentCredentialsSummary proof={proof} />
       </section>
+      <ProtectionPanel
+        proof={proof}
+        onChange={async () => onChange(await api<Proof>(`/api/proofs/${proof.id}`))}
+      />
+      <RecipientLinks proof={proof} onChange={onChange} />
       <section className="detail-section">
         <h3>
           <Link2 size={17} /> Partage de vérification
@@ -1231,6 +1227,11 @@ function ProofDetail({
                   original_received: 'Original reçu',
                   manifest_frozen: 'Manifeste figé',
                   timestamp_verified: 'Jeton d’horodatage vérifié',
+                  challenge_reviewed: 'Défi vérifié visuellement',
+                  protected_copy_issued: 'Copie protégée émise',
+                  recipient_link_created: 'Lien destinataire créé',
+                  recipient_link_revoked: 'Lien destinataire révoqué',
+                  recipient_viewed: 'Dossier consulté par un destinataire',
                 } as Record<string, string>
               )[event.kind] || event.kind}
             </span>

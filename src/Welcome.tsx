@@ -15,6 +15,7 @@ import ProofDemo from './ProofDemo';
 import WelcomeBackdrop from './WelcomeBackdrop';
 import Terms from './Terms';
 import PartnerDirectory from './PartnerDirectory';
+import CommunitySpaces from './CommunitySpaces';
 import BillingPanel from './BillingPanel';
 import './welcome.css';
 
@@ -159,6 +160,7 @@ export default function Welcome({ children }: { children: ReactNode }) {
           <a href="#comprendre">Comment ça marche</a>
           <a href="#droits">Vos droits</a>
           <a href="#offres">Nos offres</a>
+          <a href="#communaute">Communauté</a>
         </nav>
         <a className="welcome-login" href="#connexion">
           Mon espace <ArrowUpRight size={16} />
@@ -436,6 +438,7 @@ export default function Welcome({ children }: { children: ReactNode }) {
             </a>
           </section>
         </section>
+        <CommunitySpaces />
         <section className="welcome-section connection-section" id="connexion">
           <div>
             <span className="welcome-kicker">À VOUS D’ÉCRIRE LA SUITE</span>

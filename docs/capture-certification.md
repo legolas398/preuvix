@@ -32,6 +32,22 @@ Pour activer la confiance, télécharger la liste de confiance C2PA officielle (
 
 Statuts, du plus fort au plus faible : `camera_signed` (signature d’appareil de confiance), `capture_challenged` (session et défi dans le délai), `capture_documented` (session sans défi valable), `integrity_only` (import). `review_required` l’emporte dès qu’un indice IA, une signature C2PA invalide ou une IA déclarée apparaît. `aiAuthenticity` vaut `camera_provenance_verified` uniquement pour `camera_signed` ; sinon `not_established`. Les dossiers `preuvix-media-v1` restent lisibles sans modification.
 
+## Copie protégée contre les détournements
+
+Pour diffuser une photo, le dossier propose une **copie protégée** : les pixels de l’original reçoivent un filigrane invisible [TrustMark](https://github.com/adobe/trustmark) (Adobe, open source, variante Q, code correcteur BCH_5, 61 bits). Le code est tiré au hasard et lié au dossier. La copie est réencodée en JPEG sans métadonnées (GPS, appareil) ; l’original conservé n’est jamais modifié et reste la seule preuve.
+
+« Vérifier une copie en circulation » lit le filigrane d’une image, retrouve le dossier d’origine et compare l’image à l’original sur une grille de 16 × 16 zones. Une recompression ou un redimensionnement restent au-dessus de 96 % de similarité dans la zone la plus modifiée ; une retouche locale, un recadrage ou un changement de couleurs descendent en dessous et sont signalés comme modifiés. Cette comparaison est indicative : une retouche très fine peut passer inaperçue, et un filigrane peut être effacé par une transformation lourde. Elle aide à démontrer qu’une image retouchée ou générée à partir de la vôtre en dérive ; elle ne détecte pas les images IA sans lien avec un dossier.
+
+Les modèles (65 Mo) sont téléchargés au premier usage dans `DATA_DIR/models/trustmark` ou `TRUSTMARK_MODEL_DIR`. Les vidéos ne sont pas filigranées.
+
+## Rapport de certification
+
+Le PDF porte l’identité PREUVIX sur chaque page (dossier `PRX-…` et référence de rapport `PVX-XXXX-XXXX-XXXX`, dérivée du manifeste signé). Il présente un aperçu du média, la synthèse du dossier, le déroulé daté du processus (session, défi, engagement, réception, C2PA, signature, horodatage, vérification visuelle, copie protégée), les contrôles, les déclarations, la portée et les étapes de vérification, puis se termine par le bloc « Certificat PREUVIX » qui récapitule les identifiants, l’empreinte du manifeste, la clé de signature et la date d’émission. La signature porte sur `manifest.json`, pas sur le PDF.
+
+## Lien pour un commissaire de justice
+
+Depuis un dossier, « Envoyer à un commissaire de justice » crée un lien privé en lecture seule, valable 7, 30 ou 90 jours, nommé d’après son destinataire. Il ouvre une page sans compte avec le média, l’état de certification, les empreintes, le rapport PDF, l’export ZIP vérifiable et l’original. Seule l’empreinte du lien est conservée : il est affiché une seule fois, avec un e-mail prérempli. Chaque consultation est comptée et inscrite dans l’historique ; le lien peut être révoqué à tout moment et disparaît avec le dossier. Toute personne en possession du lien accède à l’original : ne le transmettre qu’au destinataire prévu.
+
 ## Gestion de la clé
 
 - Clé Ed25519 auto-générée dans `DATA_DIR/attestation-ed25519.pem` (mode 600). Sauvegarder confidentiellement avec les données ; ne jamais la publier.

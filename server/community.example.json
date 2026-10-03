@@ -1,0 +1,14 @@
+[
+  {
+    "id": "exemple-avocat-non-publie",
+    "space": "avocats",
+    "name": "EXEMPLE — Remplacer par un cabinet confirmé",
+    "area": "Paris",
+    "description": "Exemple de fiche, à remplacer par une description approuvée par le partenaire.",
+    "topics": ["Logement", "Travail"],
+    "website": "https://example.invalid/",
+    "verificationUrl": "https://www.cnb.avocat.fr/fr/annuaire-des-avocats-de-france",
+    "published": false,
+    "partnershipConfirmed": false
+  }
+]

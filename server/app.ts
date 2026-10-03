@@ -7,12 +7,13 @@ import { randomBytes, randomUUID, scryptSync, timingSafeEqual } from 'node:crypt
 import { z } from 'zod';
 import { zipSync, strToU8 } from 'fflate';
 import type { Config } from './config';
-import type { Manifest } from '../shared/types';
-import { Store } from './store';
+import type { Manifest, RecipientDossier } from '../shared/types';
+import { Store, type Row } from './store';
 import { hash, inspectImage } from './integrity';
 import { timestampService, type TimestampService } from './timestamp';
 import { makeReport } from './report';
 import { readPartners } from './partners';
+import { readCommunity } from './community';
 import { createBilling } from './billing';
 import type Stripe from 'stripe';
 import { certification } from './certification';
@@ -20,6 +21,8 @@ import { reviewOutcomes } from '../shared/capture';
 import { assessCertification } from '../shared/certification-policy';
 import { inspectMedia } from './media';
 import { validateContentCredentials } from './c2pa';
+import { newWatermarkCode, similarity, watermarking } from './watermark';
+import { shortId } from '../shared/format';
 
 export function createApp(
   config: Config,
@@ -30,6 +33,8 @@ export function createApp(
   const app = express();
   const billing = createBilling(config, store, stripeClient);
   const certificates = certification(store, config.dataDir);
+  const watermark = watermarking(config.trustmarkModelDir);
+  let watermarkBusy = false;
   app.disable('x-powered-by');
   app.use(
     helmet({
@@ -134,6 +139,18 @@ export function createApp(
         .json({ error: 'Le répertoire des partenaires est temporairement indisponible.' });
     }
   });
+  app.get('/api/community', async (_req, res) => {
+    try {
+      res.json({
+        members: await readCommunity(config.dataDir),
+        contact: config.communityContact || null,
+      });
+    } catch {
+      res
+        .status(503)
+        .json({ error: 'Les espaces communautaires sont temporairement indisponibles.' });
+    }
+  });
   app.use(
     '/api/billing',
     rateLimit({
@@ -225,6 +242,41 @@ export function createApp(
       storedFileMatches: hash(row.original) === proof.manifest.file.sha256,
       manifestMatches: hash(row.manifest) === proof.manifestHash,
     });
+  });
+  const recipient = (req: express.Request, res: express.Response, countView = false) => {
+    const token = String(req.params.token);
+    const found = /^[a-f0-9]{64}$/.test(token)
+      ? store.byRecipientToken(hash(token), countView)
+      : undefined;
+    if (!found) res.status(404).json({ error: 'Lien expiré, révoqué ou introuvable.' });
+    return found;
+  };
+  app.get('/api/dossier/:token', (req, res) => {
+    const found = recipient(req, res, true);
+    if (!found) return;
+    const { shareToken, recipientLinks, events, ...proof } = store.summary(found.row);
+    const body: RecipientDossier = {
+      proof,
+      label: found.link.label,
+      expiresAt: found.link.expires_at,
+      integrity: {
+        originalMatches: hash(found.row.original) === proof.manifest.file.sha256,
+        manifestMatches: hash(found.row.manifest) === proof.manifestHash,
+      },
+    };
+    res.json(body);
+  });
+  app.get('/api/dossier/:token/original', (req, res) => {
+    const found = recipient(req, res);
+    if (found) sendOriginal(found.row, res);
+  });
+  app.get('/api/dossier/:token/report', async (req, res) => {
+    const found = recipient(req, res);
+    if (found) await sendReport(found.row, res);
+  });
+  app.get('/api/dossier/:token/export', async (req, res) => {
+    const found = recipient(req, res);
+    if (found) await sendExport(found.row, res);
   });
   app.use('/api/proofs', requireAuth);
   app.get('/api/proofs', (_req, res) =>
@@ -484,35 +536,150 @@ export function createApp(
   app.get('/api/proofs/:id/original', (req, res) => {
     const row = store.get(req.params.id);
     if (!row) return void res.status(404).json({ error: 'Dossier introuvable.' });
+    sendOriginal(row, res);
+  });
+  const isPhoto = (mime: string) => mime.startsWith('image/');
+  // Serializes the CPU-heavy watermark model; a second request waits for the next turn.
+  async function withWatermark<T>(res: express.Response, task: () => Promise<T>) {
+    if (watermarkBusy) {
+      res
+        .status(503)
+        .json({ error: 'Une protection est déjà en cours. Réessayez dans un instant.' });
+      return undefined;
+    }
+    watermarkBusy = true;
+    try {
+      return await task();
+    } catch {
+      res.status(503).json({
+        error:
+          'Le module de protection n’a pas pu être chargé. Au premier usage, il télécharge ses modèles (65 Mo) : vérifiez la connexion puis réessayez.',
+      });
+      return undefined;
+    } finally {
+      watermarkBusy = false;
+    }
+  }
+  app.get('/api/proofs/:id/protected-copy', async (req, res) => {
+    const row = store.get(req.params.id);
+    if (!row) return void res.status(404).json({ error: 'Dossier introuvable.' });
     const manifest: Manifest = JSON.parse(row.manifest);
-    if (hash(row.original) !== manifest.file.sha256 || hash(row.manifest) !== row.manifest_hash)
-      return void res.status(409).json({ error: 'Échec du contrôle d’intégrité.' });
+    if (!isPhoto(manifest.file.mime))
+      return void res
+        .status(409)
+        .json({ error: 'La copie protégée est disponible pour les photos uniquement.' });
+    if (!intact(row)) return void res.status(409).json({ error: 'Échec du contrôle d’intégrité.' });
+    const first = !store.watermarkCode(row.id);
+    const code = store.ensureWatermark(row.id, newWatermarkCode());
+    const copy = await withWatermark(res, () => watermark.protect(Buffer.from(row.original), code));
+    if (!copy) return;
+    if (first) store.addEvent(row.id, 'protected_copy_issued');
+    res.setHeader(
+      'Content-Disposition',
+      `attachment; filename="preuvix-copie-protegee-${shortId(row.id)}.jpg"`,
+    );
+    res.type('image/jpeg').send(copy);
+  });
+  app.post(
+    '/api/watermark/check',
+    requireAuth,
+    uploadCapacity,
+    upload.single('file'),
+    async (req, res) => {
+      if (!req.file || req.file.size > 10 * 1024 * 1024)
+        return void res.status(400).json({ error: 'Choisissez une image de 10 Mo maximum.' });
+      const bytes = req.file.buffer;
+      const result = await withWatermark(res, async () => {
+        const code = await watermark.read(bytes);
+        const row = code ? store.byWatermark(code) : undefined;
+        if (!row) return { found: false as const };
+        const manifest: Manifest = JSON.parse(row.manifest);
+        const score = await similarity(Buffer.from(row.original), bytes);
+        return {
+          found: true as const,
+          proof: { id: row.id, title: manifest.title, receivedAt: manifest.receivedAt },
+          similarity: score,
+          // Calibrated: recompression and resizing stay ≥ 96 in the most altered zone.
+          verdict: score.worstZone >= 96 ? ('no_visible_change' as const) : ('modified' as const),
+        };
+      }).catch(() => {
+        res.status(400).json({ error: 'Image illisible. Utilisez un JPEG, PNG ou WebP.' });
+        return undefined;
+      });
+      if (result) res.json(result);
+    },
+  );
+  app.post('/api/proofs/:id/recipient-links', (req, res) => {
+    const row = store.get(req.params.id);
+    if (!row) return void res.status(404).json({ error: 'Dossier introuvable.' });
+    const parsed = z
+      .object({
+        label: z.string().trim().min(2).max(120),
+        days: z.union([z.literal(7), z.literal(30), z.literal(90)]),
+      })
+      .strict()
+      .safeParse(req.body);
+    if (!parsed.success)
+      return void res.status(400).json({ error: 'Destinataire ou durée de validité invalide.' });
+    const active = store
+      .recipientLinks(row.id)
+      .filter((link) => !link.revokedAt && Date.parse(link.expiresAt) > Date.now());
+    if (active.length >= 20)
+      return void res
+        .status(409)
+        .json({ error: 'Vingt liens sont déjà actifs. Révoquez-en un avant d’en créer un autre.' });
+    // Only the hash is stored: the link is shown once, at creation.
+    const token = randomBytes(32).toString('hex');
+    store.addRecipientLink(row.id, {
+      id: randomUUID(),
+      tokenHash: hash(token),
+      label: parsed.data.label,
+      expiresAt: new Date(Date.now() + parsed.data.days * 24 * 3600_000).toISOString(),
+    });
+    res.status(201).json({
+      url: `${config.origin}/dossier/${token}`,
+      proof: store.summary(store.get(row.id)!),
+    });
+  });
+  app.delete('/api/proofs/:id/recipient-links/:linkId', (req, res) => {
+    const row = store.get(req.params.id);
+    if (!row) return void res.status(404).json({ error: 'Dossier introuvable.' });
+    if (!store.revokeRecipientLink(row.id, req.params.linkId))
+      return void res.status(404).json({ error: 'Lien introuvable ou déjà révoqué.' });
+    res.json(store.summary(store.get(row.id)!));
+  });
+  app.get('/api/proofs/:id/report', async (req, res) => {
+    const row = store.get(req.params.id);
+    if (!row) return void res.status(404).json({ error: 'Dossier introuvable.' });
+    await sendReport(row, res);
+  });
+  app.get('/api/proofs/:id/export', async (req, res) => {
+    const row = store.get(req.params.id);
+    if (!row) return void res.status(404).json({ error: 'Dossier introuvable.' });
+    await sendExport(row, res);
+  });
+  const intact = (row: Row) =>
+    hash(row.manifest) === row.manifest_hash &&
+    hash(row.original) === (JSON.parse(row.manifest) as Manifest).file.sha256;
+  const report = (row: Row) =>
+    makeReport(store.summary(row), config.origin, Buffer.from(row.original));
+  async function sendReport(row: Row, res: express.Response) {
+    if (!intact(row)) return void res.status(409).json({ error: 'Échec du contrôle d’intégrité.' });
+    res.setHeader('Content-Disposition', `attachment; filename="preuvix-${row.id}.pdf"`);
+    res.type('application/pdf').send(await report(row));
+  }
+  function sendOriginal(row: Row, res: express.Response) {
+    if (!intact(row)) return void res.status(409).json({ error: 'Échec du contrôle d’intégrité.' });
+    const manifest: Manifest = JSON.parse(row.manifest);
     res.setHeader(
       'Content-Disposition',
       `inline; filename="original.${manifest.file.mime.split('/')[1]}"`,
     );
     res.type(manifest.file.mime).send(Buffer.from(row.original));
-  });
-  app.get('/api/proofs/:id/report', async (req, res) => {
-    const row = store.get(req.params.id);
-    if (!row) return void res.status(404).json({ error: 'Dossier introuvable.' });
-    if (
-      hash(row.manifest) !== row.manifest_hash ||
-      hash(row.original) !== JSON.parse(row.manifest).file.sha256
-    )
-      return void res.status(409).json({ error: 'Échec du contrôle d’intégrité.' });
-    res.setHeader('Content-Disposition', `attachment; filename="preuvix-${row.id}.pdf"`);
-    res.type('application/pdf').send(await makeReport(store.summary(row), config.origin));
-  });
-  app.get('/api/proofs/:id/export', async (req, res) => {
-    const row = store.get(req.params.id);
-    if (!row) return void res.status(404).json({ error: 'Dossier introuvable.' });
+  }
+  async function sendExport(row: Row, res: express.Response) {
+    if (!intact(row)) return void res.status(409).json({ error: 'Échec du contrôle d’intégrité.' });
     const proof = store.summary(row);
-    if (
-      hash(row.manifest) !== row.manifest_hash ||
-      hash(row.original) !== proof.manifest.file.sha256
-    )
-      return void res.status(409).json({ error: 'Échec du contrôle d’intégrité.' });
     const files: Record<string, Uint8Array> = {
       [`original.${proof.manifest.file.mime.split('/')[1]}`]: row.original,
       'manifest.json': strToU8(row.manifest),
@@ -529,7 +696,7 @@ export function createApp(
       ...(proof.reviews?.length
         ? { 'reviews.json': strToU8(JSON.stringify(proof.reviews, null, 2)) }
         : {}),
-      'rapport.pdf': await makeReport(proof, config.origin),
+      'rapport.pdf': await report(row),
       'LISEZ-MOI.txt': strToU8(
         'ATTESTATION TECHNIQUE\nLa signature Ed25519 couvre les octets exacts de manifest.json, pas le PDF.\nVerifier avec une cle publique obtenue independamment :\nopenssl pkeyutl -verify -pubin -inkey signer-public.pem -rawin -in manifest.json -sigfile manifest.sig\nLa cle fournie dans ce ZIP ne prouve pas a elle seule l identite du signataire.\nreviews.json (si present) : verifications visuelles du defi en direct, chacune signee separement (champ payload).\nCette signature auto-generee n est pas une signature qualifiee eIDAS.\n\n' +
           "PREUVIX — Dossier technique\nLe manifeste est fourni dans ses octets exacts : ne pas le reformater avant verification.\nComparer le SHA-256 de l'original a manifest.json, puis celui du manifeste au jeton.\nLe fichier manifest.sha256 est une aide, pas une ancre de confiance.\nAvec OpenSSL et une chaine de confiance obtenue independamment :\nopenssl ts -verify -data manifest.json -in timestamp.tsr -CAfile trusted-ca.pem\nopenssl ts -verify -queryfile timestamp.tsq -in timestamp.tsr -CAfile trusted-ca.pem\nLa qualification eIDAS exige la verification du service dans la liste de confiance a la date du jeton.\nSans timestamp.tsr : aucun horodatage independant.\nCe dossier n'atteste ni la realite de la scene ni l'absence d'IA.\nL'original peut contenir des metadonnees personnelles.\n",
@@ -541,7 +708,7 @@ export function createApp(
     }
     res.setHeader('Content-Disposition', `attachment; filename="preuvix-${row.id}.zip"`);
     res.type('application/zip').send(Buffer.from(zipSync(files, { level: 0 })));
-  });
+  }
   app.use('/api', (_req, res) => res.status(404).json({ error: 'Route introuvable.' }));
   const errorHandler: ErrorRequestHandler = (error, _req, res, _next) => {
     if (error instanceof multer.MulterError)

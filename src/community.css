@@ -1,0 +1,208 @@
+.community-section {
+  color: var(--w-ink);
+}
+.community-tabs {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+  padding: 10px;
+  background: var(--w-soft);
+  border-radius: 12px;
+}
+.community-tabs button {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 8px;
+  min-width: 0;
+  padding: 18px;
+  text-align: left;
+  color: var(--w-muted);
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  font-size: 14px;
+}
+.community-tabs button svg {
+  color: var(--w-accent);
+}
+.community-tabs button small {
+  font-size: 10px;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+}
+.community-tabs button[aria-pressed='true'] {
+  background: var(--w-paper);
+  color: var(--w-ink);
+  border-color: var(--w-line);
+}
+.community-panel {
+  display: grid;
+  grid-template-columns: minmax(0, 5fr) minmax(0, 7fr);
+  gap: 32px;
+  margin-top: 16px;
+  padding: 34px;
+  background: var(--w-paper);
+  border: 1px solid var(--w-line);
+  border-radius: 12px;
+}
+.community-panel-intro > svg {
+  color: var(--w-accent);
+}
+.community-panel-intro h3 {
+  margin: 14px 0 8px;
+  font:
+    400 30px/1.2 var(--font-display),
+    serif;
+}
+.community-panel-intro p,
+.community-panel-intro li {
+  font-size: 13px;
+  line-height: 1.7;
+  color: var(--w-muted);
+}
+.community-panel-intro ul {
+  padding-left: 18px;
+  margin: 12px 0;
+}
+.community-check {
+  display: flex;
+  gap: 8px;
+  align-items: flex-start;
+  padding-top: 12px;
+  border-top: 1px solid var(--w-line);
+}
+.community-check svg {
+  flex: none;
+  margin-top: 4px;
+  color: var(--w-accent);
+}
+.community-members {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 12px;
+  align-content: start;
+}
+.community-card,
+.community-empty {
+  min-width: 0;
+  padding: 20px;
+  background: var(--w-bg);
+  border: 1px solid var(--w-line);
+  border-radius: 10px;
+  overflow-wrap: anywhere;
+}
+.community-empty {
+  grid-column: 1 / -1;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 6px;
+  border-style: dashed;
+}
+.community-empty strong {
+  font:
+    400 22px/1.3 var(--font-display),
+    serif;
+}
+.community-empty p,
+.community-card p {
+  font-size: 13px;
+  line-height: 1.6;
+  color: var(--w-muted);
+  margin: 6px 0 12px;
+}
+.community-card h4 {
+  margin: 0 0 6px;
+  font:
+    700 19px/1.3 var(--font-display),
+    serif;
+}
+.community-area {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 11px;
+  color: var(--w-muted);
+}
+.community-topics {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 12px;
+}
+.community-topics span {
+  padding: 4px 8px;
+  border-radius: 4px;
+  background: var(--w-soft);
+  font-size: 10px;
+}
+.community-links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+.community-links a {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 11px;
+  color: var(--w-ink);
+  text-decoration: underline;
+}
+.community-join {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 24px;
+  margin-top: 16px;
+  padding: 24px 30px;
+  background: var(--w-soft);
+  border: 1px solid var(--w-line);
+  border-radius: 12px;
+}
+.community-join p {
+  margin: 4px 0 0;
+  font-size: 13px;
+  color: var(--w-muted);
+}
+.community-join .welcome-button {
+  flex: none;
+}
+.community-soon {
+  flex: none;
+  font-size: 11px;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  color: var(--w-muted);
+}
+.community-boundary {
+  margin: 12px 0 0;
+  font-size: 11px;
+  color: var(--w-muted);
+}
+@media (max-width: 850px) {
+  .community-tabs {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .community-panel {
+    grid-template-columns: 1fr;
+    padding: 24px;
+  }
+  .community-join {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+}
+@media (max-width: 600px) {
+  .community-tabs button {
+    padding: 12px;
+    font-size: 12px;
+  }
+  .community-panel {
+    padding: 18px;
+  }
+  .community-join {
+    padding: 18px;
+  }
+}

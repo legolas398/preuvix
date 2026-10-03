@@ -1,12 +1,12 @@
 import { DatabaseSync } from 'node:sqlite';
 import { mkdirSync } from 'node:fs';
 import path from 'node:path';
-import type { Manifest, Proof, TimestampReceipt } from '../shared/types';
+import type { Manifest, Proof, RecipientLink, TimestampReceipt } from '../shared/types';
 import { hash } from './integrity';
 import type { Attestation, SignedReview } from '../shared/capture';
 import { verify } from 'node:crypto';
 
-type Row = {
+export type Row = {
   id: string;
   manifest: string;
   manifest_hash: string;
@@ -40,6 +40,12 @@ export class Store {
         BEGIN SELECT RAISE(ABORT, 'Original and manifest are immutable'); END;
       CREATE TABLE IF NOT EXISTS sessions (hash TEXT PRIMARY KEY, expires INTEGER NOT NULL);
       CREATE TABLE IF NOT EXISTS attestations (proof_id TEXT PRIMARY KEY REFERENCES proofs(id) ON DELETE CASCADE, payload TEXT NOT NULL);
+      CREATE TABLE IF NOT EXISTS watermarks (proof_id TEXT PRIMARY KEY REFERENCES proofs(id) ON DELETE CASCADE, code TEXT NOT NULL UNIQUE, created_at TEXT NOT NULL);
+      CREATE TABLE IF NOT EXISTS recipient_links (
+        id TEXT PRIMARY KEY, proof_id TEXT NOT NULL REFERENCES proofs(id) ON DELETE CASCADE,
+        token_hash TEXT NOT NULL UNIQUE, label TEXT NOT NULL, created_at TEXT NOT NULL,
+        expires_at TEXT NOT NULL, revoked_at TEXT, views INTEGER NOT NULL DEFAULT 0, last_view_at TEXT
+      );
       CREATE TABLE IF NOT EXISTS reviews (proof_id TEXT NOT NULL REFERENCES proofs(id) ON DELETE CASCADE, payload TEXT NOT NULL);
       CREATE TRIGGER IF NOT EXISTS append_only_reviews BEFORE UPDATE ON reviews
         BEGIN SELECT RAISE(ABORT, 'Reviews are append-only'); END;
@@ -95,7 +101,96 @@ export class Store {
       shareToken: row.share_token,
       attestation,
       reviews,
+      watermarked: Boolean(this.watermarkCode(row.id)),
+      recipientLinks: this.recipientLinks(row.id),
     };
+  }
+  watermarkCode(id: string) {
+    return (
+      this.db.prepare('SELECT code FROM watermarks WHERE proof_id=?').get(id) as
+        { code: string } | undefined
+    )?.code;
+  }
+  // Returns the existing code, or stores the candidate on first use.
+  ensureWatermark(id: string, candidate: string) {
+    this.db
+      .prepare('INSERT OR IGNORE INTO watermarks VALUES (?,?,?)')
+      .run(id, candidate, new Date().toISOString());
+    return this.watermarkCode(id)!;
+  }
+  byWatermark(code: string) {
+    const found = this.db.prepare('SELECT proof_id FROM watermarks WHERE code=?').get(code) as
+      { proof_id: string } | undefined;
+    return found ? this.get(found.proof_id) : undefined;
+  }
+  recipientLinks(id: string): RecipientLink[] {
+    return (
+      this.db
+        .prepare(
+          'SELECT id,label,created_at,expires_at,revoked_at,views,last_view_at FROM recipient_links WHERE proof_id=? ORDER BY created_at DESC',
+        )
+        .all(id) as {
+        id: string;
+        label: string;
+        created_at: string;
+        expires_at: string;
+        revoked_at: string | null;
+        views: number;
+        last_view_at: string | null;
+      }[]
+    ).map((link) => ({
+      id: link.id,
+      label: link.label,
+      createdAt: link.created_at,
+      expiresAt: link.expires_at,
+      revokedAt: link.revoked_at,
+      views: link.views,
+      lastViewAt: link.last_view_at,
+    }));
+  }
+  addRecipientLink(
+    proofId: string,
+    link: { id: string; tokenHash: string; label: string; expiresAt: string },
+  ) {
+    this.db
+      .prepare(
+        'INSERT INTO recipient_links (id,proof_id,token_hash,label,created_at,expires_at) VALUES (?,?,?,?,?,?)',
+      )
+      .run(link.id, proofId, link.tokenHash, link.label, new Date().toISOString(), link.expiresAt);
+    this.addEvent(proofId, 'recipient_link_created');
+  }
+  revokeRecipientLink(proofId: string, linkId: string) {
+    const changed = this.db
+      .prepare(
+        'UPDATE recipient_links SET revoked_at=? WHERE id=? AND proof_id=? AND revoked_at IS NULL',
+      )
+      .run(new Date().toISOString(), linkId, proofId).changes;
+    if (changed) this.addEvent(proofId, 'recipient_link_revoked');
+    return changed > 0;
+  }
+  // Active (not revoked, not expired) link; records the visit.
+  byRecipientToken(tokenHash: string, countView: boolean) {
+    const link = this.db
+      .prepare(
+        'SELECT id,proof_id,label,expires_at FROM recipient_links WHERE token_hash=? AND revoked_at IS NULL AND expires_at>?',
+      )
+      .get(tokenHash, new Date().toISOString()) as
+      { id: string; proof_id: string; label: string; expires_at: string } | undefined;
+    if (!link) return undefined;
+    if (countView) {
+      this.db
+        .prepare('UPDATE recipient_links SET views=views+1, last_view_at=? WHERE id=?')
+        .run(new Date().toISOString(), link.id);
+      this.addEvent(link.proof_id, 'recipient_viewed');
+    }
+    const row = this.get(link.proof_id);
+    return row ? { link, row } : undefined;
+  }
+  addEvent(id: string, kind: string) {
+    const row = this.get(id);
+    if (!row) return;
+    const events = [...JSON.parse(row.events), { at: new Date().toISOString(), kind }];
+    this.db.prepare('UPDATE proofs SET events=? WHERE id=?').run(JSON.stringify(events), id);
   }
   list(): Proof[] {
     return (
