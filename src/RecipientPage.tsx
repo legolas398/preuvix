@@ -13,6 +13,7 @@ import { certificationLabels } from '../shared/certification-policy';
 import { shortId } from '../shared/format';
 import { api } from './api';
 import './protection.css';
+import { PageAppearance } from './Theme';
 
 const date = (value: string) =>
   new Intl.DateTimeFormat('fr-FR', {
@@ -50,6 +51,7 @@ export default function RecipientPage({ token }: { token: string }) {
         </span>
         <span className="recipient-readonly">Lecture seule</span>
       </header>
+      <PageAppearance />
       <main className="verification-card recipient-card">
         <span className="eyebrow">DOSSIER DE PREUVE TRANSMIS</span>
         {error && (

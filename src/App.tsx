@@ -46,6 +46,7 @@ import Welcome, { JusticeLoading } from './Welcome';
 import PartnerDirectory from './PartnerDirectory';
 import BillingPanel from './BillingPanel';
 import CapturePanel from './CapturePanel';
+import { PageAppearance } from './Theme';
 
 const date = (value: string) =>
   new Intl.DateTimeFormat('fr-FR', {
@@ -213,6 +214,9 @@ function Login({ onLogin }: { onLogin: () => Promise<void> }) {
 }
 
 function Workspace({ config, onLogout }: { config: AppConfig; onLogout: () => Promise<void> }) {
+  useEffect(() => {
+    window.scrollTo({ top: 0, behavior: 'instant' });
+  }, []);
   const [tab, setTab] = useState<'proofs' | 'verify' | 'about' | 'billing'>(() => {
     try {
       if (
@@ -282,6 +286,7 @@ function Workspace({ config, onLogout }: { config: AppConfig; onLogout: () => Pr
             <Sparkles size={19} /> Mon abonnement
           </button>
         </nav>
+        <PageAppearance />
         <div className="sidebar-bottom">
           <div className="storage-card">
             <div>
@@ -1378,6 +1383,7 @@ function PublicVerification({ token }: { token: string }) {
           <ArrowLeft size={16} /> Mon espace
         </a>
       </header>
+      <PageAppearance />
       <main className="verification-card">
         <span className="eyebrow">VÉRIFICATION PARTAGÉE</span>
         <h1>Vérifier, en toute clarté.</h1>

@@ -1,45 +1,8 @@
 .welcome {
-  --w-bg: #fff5eb;
-  --w-paper: #fffcf8;
-  --w-ink: #492917;
-  --w-muted: #785c4e;
-  --w-line: #e9cdb8;
-  --w-soft: #fce7d4;
-  --w-accent: #ad4b18;
-  --w-button: #b34c1d;
-  --glow-one: #ff9a46;
-  --glow-two: #f5aeab;
-  --w-on-button: #fff;
-  --green: var(--w-button);
   color: var(--w-ink);
   background: var(--w-bg);
   min-height: 100svh;
   font-family: var(--font-body);
-}
-.welcome[data-theme='Aurore'] {
-  --w-bg: #faf2ff;
-  --w-paper: #fffbff;
-  --w-ink: #462647;
-  --w-muted: #765d78;
-  --w-line: #e6cde8;
-  --w-soft: #f0e0f2;
-  --w-accent: #953f75;
-  --w-button: #8c3973;
-  --glow-one: #eaa0ce;
-  --glow-two: #a0adf4;
-}
-.welcome[data-theme='Minuit'] {
-  --w-bg: #101e26;
-  --w-paper: #1a2c35;
-  --w-ink: #e5ede7;
-  --w-muted: #aabeb9;
-  --w-line: #354953;
-  --w-soft: #20343e;
-  --w-accent: #ffc191;
-  --w-button: #ffc191;
-  --w-on-button: #352217;
-  --glow-one: #a15327;
-  --glow-two: #585fc0;
 }
 .ambient-welcome {
   position: relative;

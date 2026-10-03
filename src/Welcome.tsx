@@ -19,39 +19,8 @@ import CommunitySpaces from './CommunitySpaces';
 import BillingPanel from './BillingPanel';
 import './welcome.css';
 
-const themes = ['Orange', 'Aurore', 'Minuit'] as const;
-type Theme = (typeof themes)[number];
-function useTheme() {
-  const [theme, setTheme] = useState<Theme>(() => {
-    try {
-      const saved = localStorage.getItem('preuvix-theme');
-      return themes.find((t) => t === saved) || 'Orange';
-    } catch {
-      return 'Orange';
-    }
-  });
-  function select(value: Theme) {
-    setTheme(value);
-    try {
-      localStorage.setItem('preuvix-theme', value);
-    } catch {
-      /* Theme remains usable without storage. */
-    }
-  }
-  return { theme, select };
-}
-function ThemePicker({ theme, select }: ReturnType<typeof useTheme>) {
-  return (
-    <div className="theme-picker" role="group" aria-label="Thème visuel">
-      {themes.map((value, index) => (
-        <button key={value} aria-pressed={theme === value} onClick={() => select(value)}>
-          <span className={`theme-dot theme-dot-${index}`} />
-          {value}
-        </button>
-      ))}
-    </div>
-  );
-}
+import { useTheme, ThemePicker, type Theme } from './Theme';
+
 const rights = [
   {
     code: 'ART. 9',
@@ -153,7 +122,7 @@ export default function Welcome({ children }: { children: ReactNode }) {
       />
     );
   return (
-    <WelcomeBackdrop theme={appearance.theme}>
+    <WelcomeBackdrop theme={appearance.resolvedTheme}>
       <header className="welcome-header">
         <Wordmark />
         <nav aria-label="Navigation d’accueil">
@@ -252,7 +221,7 @@ export default function Welcome({ children }: { children: ReactNode }) {
         </section>
         <div className="welcome-toolbar">
           <span>Un espace à votre image.</span>
-          <ThemePicker {...appearance} />
+          <ThemePicker />
           <a href="#droits">
             La technologie au service de vos droits <ArrowDown size={14} />
           </a>
@@ -485,10 +454,10 @@ export function JusticeLoading({ onContinue }: { onContinue?: (theme: Theme) => 
     return () => window.clearTimeout(timer);
   }, [onContinue]);
   return (
-    <WelcomeBackdrop theme={appearance.theme} loading>
+    <WelcomeBackdrop theme={appearance.resolvedTheme} loading>
       <header className="welcome-header">
         <Wordmark />
-        <ThemePicker {...appearance} />
+        <ThemePicker />
       </header>
       <main className="startup-main">
         <section className="startup-card" aria-label="Ouverture de Preuvix">

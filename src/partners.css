@@ -362,12 +362,6 @@
 }
 .proof-partners {
   margin: 22px 0;
-  --w-ink: #492917;
-  --w-muted: #785c4e;
-  --w-accent: #ad4b18;
-  --w-line: #e9cdb8;
-  --w-soft: #fce7d4;
-  --w-paper: #fffcf8;
 }
 .proof-partners > summary {
   padding: 14px 0;

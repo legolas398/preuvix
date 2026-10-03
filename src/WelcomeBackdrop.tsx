@@ -11,6 +11,9 @@ export default function WelcomeBackdrop({
   children: ReactNode;
 }) {
   const root = useRef<HTMLDivElement>(null);
+  const frame = useRef<number | null>(null);
+  const pointer = useRef({ x: 65, y: 35 });
+  const [visible, setVisible] = useState(() => !document.hidden);
   const [motion, setMotion] = useState(() => {
     try {
       return localStorage.getItem('preuvix-motion') !== 'off';
@@ -27,6 +30,14 @@ export default function WelcomeBackdrop({
     media.addEventListener('change', update);
     return () => media.removeEventListener('change', update);
   }, []);
+  useEffect(() => {
+    const update = () => setVisible(!document.hidden);
+    document.addEventListener('visibilitychange', update);
+    return () => {
+      document.removeEventListener('visibilitychange', update);
+      if (frame.current !== null) cancelAnimationFrame(frame.current);
+    };
+  }, []);
   const animated = motion && !reduced;
   return (
     <div
@@ -34,16 +45,19 @@ export default function WelcomeBackdrop({
       className={`welcome ambient-welcome ${loading ? 'justice-loading' : ''}`}
       data-theme={theme}
       data-motion={animated ? 'on' : 'off'}
+      data-visible={visible}
       onPointerMove={(event) => {
-        if (!animated || event.pointerType !== 'mouse') return;
-        root.current?.style.setProperty(
-          '--pointer-x',
-          `${Math.round((event.clientX / window.innerWidth) * 100)}%`,
-        );
-        root.current?.style.setProperty(
-          '--pointer-y',
-          `${Math.round((event.clientY / window.innerHeight) * 100)}%`,
-        );
+        if (!animated || !visible || event.pointerType !== 'mouse') return;
+        pointer.current = {
+          x: Math.round((event.clientX / window.innerWidth) * 100),
+          y: Math.round((event.clientY / window.innerHeight) * 100),
+        };
+        if (frame.current !== null) return;
+        frame.current = requestAnimationFrame(() => {
+          root.current?.style.setProperty('--pointer-x', `${pointer.current.x}%`);
+          root.current?.style.setProperty('--pointer-y', `${pointer.current.y}%`);
+          frame.current = null;
+        });
       }}
     >
       <div className="ambient-canvas" aria-hidden="true">
