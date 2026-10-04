@@ -15,6 +15,17 @@ test('loading screen transitions to a usable proof demo on mobile', async ({ pag
   await expect(page.getByRole('heading', { name: 'Chaque preuve compte.' })).toBeVisible({
     timeout: 60000,
   });
+  const stories = page.getByRole('region', { name: 'Situations où une preuve compte' });
+  await stories.getByRole('button', { name: 'Situation 2 : Route' }).click();
+  await expect(
+    stories.getByRole('heading', { name: 'Un accrochage sur un parking.' }),
+  ).toBeVisible();
+  await stories.getByRole('button', { name: 'Mettre en pause le défilement' }).click();
+  await page.waitForTimeout(7000);
+  await expect(
+    stories.getByRole('heading', { name: 'Un accrochage sur un parking.' }),
+  ).toBeVisible();
+  await expect(page.getByRole('note', { name: 'Le saviez-vous ?' })).toBeVisible();
   await page.getByRole('button', { name: 'ART. 1358 Modes de preuve' }).click();
   await expect(
     page.getByRole('heading', { name: 'Plusieurs moyens de faire la preuve.' }),

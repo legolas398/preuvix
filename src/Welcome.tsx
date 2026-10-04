@@ -23,6 +23,7 @@ import {
 } from 'lucide-react';
 import ProofDemo from './ProofDemo';
 import WelcomeBackdrop from './WelcomeBackdrop';
+import { LoadingStories, ProofFacts } from './LoadingStories';
 import Terms from './Terms';
 import PartnerDirectory from './PartnerDirectory';
 import CommunitySpaces from './CommunitySpaces';
@@ -587,27 +588,7 @@ export function JusticeLoading({ onContinue }: { onContinue?: (theme: Theme) => 
       </header>
       <main className="startup-main">
         <section className="startup-card" aria-label="Ouverture de Preuvix">
-          <div className="startup-visual" aria-hidden="true">
-            <div className="startup-ring" />
-            <div className="startup-ring ring-outer" />
-            <div className="startup-file">
-              <div className="startup-file-top">
-                <Fingerprint size={22} />
-                <span>PREUVIX / ORIGINAL</span>
-              </div>
-              <Scale size={64} strokeWidth={1.1} />
-              <div className="startup-file-lines">
-                <i />
-                <i />
-                <i />
-              </div>
-              <div className="startup-file-seal">
-                <ShieldCheck size={18} /> CONSERVER LES FAITS
-              </div>
-              <div className="startup-scan" />
-            </div>
-            <span className="startup-spark">✦</span>
-          </div>
+          <LoadingStories />
           <div className="startup-copy">
             <span className="welcome-kicker">VOS DROITS. VOTRE VOIX. VOS PREUVES.</span>
             <h1>
@@ -651,6 +632,7 @@ export function JusticeLoading({ onContinue }: { onContinue?: (theme: Theme) => 
             )}
           </div>
         </section>
+        <ProofFacts />
         <div className="startup-rights-heading">
           <span className="welcome-kicker">EN ATTENDANT, EXPLOREZ VOS DROITS</span>
           <span>6 repères · Sources officielles</span>
