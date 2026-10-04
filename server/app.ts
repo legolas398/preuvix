@@ -7,7 +7,7 @@ import { randomBytes, randomUUID, scryptSync, timingSafeEqual } from 'node:crypt
 import { z } from 'zod';
 import { zipSync, strToU8 } from 'fflate';
 import type { Config } from './config';
-import type { Manifest, RecipientDossier } from '../shared/types';
+import type { Manifest, Proof, RecipientDossier } from '../shared/types';
 import { Store, type Row } from './store';
 import { hash, inspectImage } from './integrity';
 import { timestampService, type TimestampService } from './timestamp';
@@ -16,8 +16,10 @@ import { readPartners } from './partners';
 import { readCommunity } from './community';
 import { createBilling } from './billing';
 import type Stripe from 'stripe';
-import { certification } from './certification';
-import { reviewOutcomes } from '../shared/capture';
+import { certification, verifyProgressive } from './certification';
+import { reviewOutcomes, type AnnexStatement, type DocumentStatement } from '../shared/capture';
+import { certificationLabels } from '../shared/certification-policy';
+import { buildChain } from './chain';
 import { assessCertification } from '../shared/certification-policy';
 import { inspectMedia } from './media';
 import { validateContentCredentials } from './c2pa';
@@ -178,6 +180,21 @@ export function createApp(
       res.status(429).json({ error: (error as Error).message });
     }
   });
+  app.post('/api/captures/:id/checkpoint', requireAuth, (req, res) => {
+    try {
+      res.json(
+        certificates.progress(
+          z.uuid().parse(req.params.id),
+          hash(req.cookies.preuvix_session),
+          req.body,
+        ),
+      );
+    } catch {
+      res.status(409).json({
+        error: 'Point d’engagement refusé : session expirée, déjà engagée ou données incohérentes.',
+      });
+    }
+  });
   app.post('/api/captures/:id/commit', requireAuth, (req, res) => {
     try {
       res.json(
@@ -254,7 +271,15 @@ export function createApp(
   app.get('/api/dossier/:token', (req, res) => {
     const found = recipient(req, res, true);
     if (!found) return;
-    const { shareToken, recipientLinks, events, ...proof } = store.summary(found.row);
+    const { shareToken, recipientLinks, events, ...proof } = full(found.row);
+    // Other recipients' names stay private: only the event kinds are shown.
+    if (proof.custody)
+      proof.custody = {
+        ...proof.custody,
+        entries: proof.custody.entries.map((entry) =>
+          entry.kind.startsWith('recipient_') ? { ...entry, detail: {} } : entry,
+        ),
+      };
     const body: RecipientDossier = {
       proof,
       label: found.link.label,
@@ -277,6 +302,71 @@ export function createApp(
   app.get('/api/dossier/:token/export', async (req, res) => {
     const found = recipient(req, res);
     if (found) await sendExport(found.row, res);
+  });
+  app.get('/api/dossier/:token/annexes/:annexId', (req, res) => {
+    const found = recipient(req, res);
+    if (found) sendAnnex(found.row, String(req.params.annexId), res);
+  });
+  // Public: anyone holding a PREUVIX report or export can check it was issued unaltered.
+  app.get(
+    '/api/documents/:sha256',
+    rateLimit({
+      windowMs: 60_000,
+      limit: 30,
+      standardHeaders: 'draft-8',
+      legacyHeaders: false,
+      message: { error: 'Trop de vérifications. Réessayez dans une minute.' },
+    }),
+    (req, res) => {
+      const sha = String(req.params.sha256);
+      if (!/^[a-f0-9]{64}$/.test(sha))
+        return void res.status(400).json({ error: 'Empreinte SHA-256 invalide.' });
+      const signed = store.documentByHash(sha);
+      if (!signed) return void res.json({ found: false });
+      const row = store.get(signed.content.proofId);
+      const manifest: Manifest | null = row ? JSON.parse(row.manifest) : null;
+      res.json({
+        found: true,
+        documentId: signed.content.documentId,
+        kind: signed.content.kind,
+        issuedAt: signed.content.issuedAt,
+        dossier: shortId(signed.content.proofId),
+        manifestHash: signed.content.manifestHash,
+        custodyLength: signed.content.custodyLength,
+        signatureValid: store.validSignature(signed),
+        dossierIntact: row ? intact(row) : false,
+        status: manifest?.certification ? certificationLabels[manifest.certification.status] : null,
+        timestamped: row?.status === 'timestamped',
+      });
+    },
+  );
+  // Owner-only: which dossier, annex or document does a local file belong to?
+  app.get('/api/lookup/:sha256', requireAuth, (req, res) => {
+    const sha = String(req.params.sha256);
+    if (!/^[a-f0-9]{64}$/.test(sha))
+      return void res.status(400).json({ error: 'Empreinte SHA-256 invalide.' });
+    const matches: { kind: string; proofId: string; label: string; at: string }[] = [];
+    for (const row of store.db
+      .prepare(
+        "SELECT id, json_extract(manifest,'$.title') AS title, json_extract(manifest,'$.receivedAt') AS at FROM proofs WHERE json_extract(manifest,'$.file.sha256')=?",
+      )
+      .all(sha) as { id: string; title: string; at: string }[])
+      matches.push({ kind: 'original', proofId: row.id, label: row.title, at: row.at });
+    for (const row of store.db
+      .prepare(
+        "SELECT proof_id, json_extract(payload,'$.name') AS name, json_extract(payload,'$.addedAt') AS at FROM annexes WHERE json_extract(payload,'$.sha256')=?",
+      )
+      .all(sha) as { proof_id: string; name: string; at: string }[])
+      matches.push({ kind: 'annex', proofId: row.proof_id, label: row.name, at: row.at });
+    const document = store.documentByHash(sha);
+    if (document)
+      matches.push({
+        kind: document.content.kind,
+        proofId: document.content.proofId,
+        label: document.content.documentId,
+        at: document.content.issuedAt,
+      });
+    res.json({ matches });
   });
   app.use('/api/proofs', requireAuth);
   app.get('/api/proofs', (_req, res) =>
@@ -410,6 +500,15 @@ export function createApp(
       return void res
         .status(409)
         .json({ error: 'Le type du média ne correspond pas à la session.' });
+    if (capture?.kind === 'video')
+      capture = {
+        ...capture,
+        progressive: verifyProgressive(
+          capture,
+          req.file.buffer,
+          'durationSeconds' in inspected ? (inspected.durationSeconds as number) : 0,
+        ),
+      };
     const storageLimit = (await billing.refreshStatus()).maxStorageMb;
     if (existingResponse()) return;
     if (store.usedBytes() + req.file.size > storageLimit * 1024 * 1024)
@@ -456,12 +555,92 @@ export function createApp(
     } catch {
       /* Saved as pending; explicitly retryable, never falsely sealed. */
     }
-    res.status(201).json(store.summary(store.get(id)!));
+    res.status(201).json(full(store.get(id)!));
   });
   app.get('/api/proofs/:id', (req, res) => {
     const row = store.get(req.params.id);
     if (!row) return void res.status(404).json({ error: 'Dossier introuvable.' });
-    res.json(store.summary(row));
+    res.json(full(row));
+  });
+  const annexUpload = multer({
+    storage: multer.memoryStorage(),
+    limits: { fileSize: 10 * 1024 * 1024, files: 1, fields: 4, fieldSize: 2048, parts: 5 },
+  });
+  app.post(
+    '/api/proofs/:id/annexes',
+    uploadCapacity,
+    annexUpload.single('file'),
+    async (req, res) => {
+      const row = store.get(String(req.params.id));
+      if (!row) return void res.status(404).json({ error: 'Dossier introuvable.' });
+      const parsed = z
+        .object({
+          clientSha256: z.string().regex(/^[a-f0-9]{64}$/),
+          note: z.string().trim().max(500).default(''),
+          requestKey: z.uuid(),
+        })
+        .safeParse(req.body);
+      if (!parsed.success || !req.file)
+        return void res
+          .status(400)
+          .json({ error: 'Choisissez une pièce et attendez le calcul de son empreinte.' });
+      const bytes = req.file.buffer;
+      const sha256 = hash(bytes);
+      if (sha256 !== parsed.data.clientSha256)
+        return void res.status(422).json({
+          error:
+            'L’empreinte reçue diffère de celle calculée dans votre navigateur. La pièce n’a pas été ajoutée.',
+        });
+      const previous = store.annexByKey(parsed.data.requestKey);
+      if (previous) {
+        const existing = store.annex(previous.proof_id, previous.id);
+        if (previous.proof_id !== row.id || existing?.signed.content.sha256 !== sha256)
+          return void res
+            .status(409)
+            .json({ error: 'Cet identifiant de dépôt correspond à une autre pièce.' });
+        return void res.json(full(row));
+      }
+      const mime = annexType(bytes);
+      if (!mime)
+        return void res.status(415).json({
+          error:
+            'Format non pris en charge. Utilisez un PDF, une image JPEG, PNG ou WebP, ou un texte (TXT, EML, CSV).',
+        });
+      if (!intact(row))
+        return void res.status(409).json({ error: 'Échec du contrôle d’intégrité du dossier.' });
+      const count = store.annexes(row.id).length;
+      if (count >= 30)
+        return void res.status(409).json({ error: 'Trente pièces maximum par dossier.' });
+      const storageLimit = (await billing.refreshStatus()).maxStorageMb;
+      if (store.usedBytes() + bytes.length > storageLimit * 1024 * 1024)
+        return void res
+          .status(413)
+          .json({ error: 'Espace de stockage plein. Exportez et supprimez un dossier.' });
+      const statement: AnnexStatement = {
+        type: 'preuvix-annex-v1',
+        annexId: randomUUID(),
+        proofId: row.id,
+        manifestHash: row.manifest_hash,
+        seq: count + 1,
+        name: req.file.originalname.replace(/[\x00-\x1f\\/"]/g, '_').slice(0, 180) || 'piece',
+        mime,
+        size: bytes.length,
+        sha256,
+        note: parsed.data.note,
+        addedAt: new Date().toISOString(),
+      };
+      try {
+        store.addAnnex(certificates.signStatement(statement), bytes, parsed.data.requestKey);
+      } catch {
+        return void res.status(409).json({ error: 'Pièce non ajoutée. Réessayez.' });
+      }
+      res.status(201).json(full(store.get(row.id)!));
+    },
+  );
+  app.get('/api/proofs/:id/annexes/:annexId', (req, res) => {
+    const row = store.get(req.params.id);
+    if (!row) return void res.status(404).json({ error: 'Dossier introuvable.' });
+    sendAnnex(row, req.params.annexId, res);
   });
   app.post('/api/proofs/:id/timestamp', async (req, res) => {
     if (!store.get(req.params.id))
@@ -474,7 +653,7 @@ export function createApp(
       return void res.status(409).json({ error: 'Horodatage déjà en cours.' });
     try {
       await stamp(req.params.id);
-      res.json(store.summary(store.get(req.params.id)!));
+      res.json(full(store.get(req.params.id)!));
     } catch {
       res.status(503).json({
         error:
@@ -510,7 +689,7 @@ export function createApp(
         reviewedAt: new Date().toISOString(),
       }),
     );
-    res.status(201).json(store.summary(store.get(row.id)!));
+    res.status(201).json(full(store.get(row.id)!));
   });
   app.post('/api/proofs/:id/share', (req, res) => {
     const row = store.get(req.params.id);
@@ -521,7 +700,7 @@ export function createApp(
       row.id,
       parsed.data.enabled ? row.share_token || randomBytes(24).toString('hex') : null,
     );
-    res.json(store.summary(store.get(row.id)!));
+    res.json(full(store.get(row.id)!));
   });
   app.delete('/api/proofs/:id', (req, res) => {
     if (busy.has(req.params.id))
@@ -638,7 +817,7 @@ export function createApp(
     });
     res.status(201).json({
       url: `${config.origin}/dossier/${token}`,
-      proof: store.summary(store.get(row.id)!),
+      proof: full(store.get(row.id)!),
     });
   });
   app.delete('/api/proofs/:id/recipient-links/:linkId', (req, res) => {
@@ -646,7 +825,7 @@ export function createApp(
     if (!row) return void res.status(404).json({ error: 'Dossier introuvable.' });
     if (!store.revokeRecipientLink(row.id, req.params.linkId))
       return void res.status(404).json({ error: 'Lien introuvable ou déjà révoqué.' });
-    res.json(store.summary(store.get(row.id)!));
+    res.json(full(store.get(row.id)!));
   });
   app.get('/api/proofs/:id/report', async (req, res) => {
     const row = store.get(req.params.id);
@@ -661,12 +840,58 @@ export function createApp(
   const intact = (row: Row) =>
     hash(row.manifest) === row.manifest_hash &&
     hash(row.original) === (JSON.parse(row.manifest) as Manifest).file.sha256;
-  const report = (row: Row) =>
-    makeReport(store.summary(row), config.origin, Buffer.from(row.original));
+  // Full view: summary plus the chain re-verified from the stored bytes.
+  function full(row: Row): Proof {
+    const proof = store.summary(row);
+    return { ...proof, chain: buildChain(store, row, proof) };
+  }
+  const documentId = () => {
+    const raw = randomBytes(6).toString('hex').toUpperCase();
+    return `DOC-${raw.slice(0, 4)}-${raw.slice(4, 8)}-${raw.slice(8)}`;
+  };
+  // Every issued document is hashed, signed and journaled: a modified copy is detectable.
+  function issue(row: Row, kind: DocumentStatement['kind'], id: string, bytes: Uint8Array) {
+    const custody = store.custody(row.id, row.manifest_hash);
+    store.addDocument(
+      certificates.signStatement<DocumentStatement>({
+        type: 'preuvix-document-v1',
+        documentId: id,
+        proofId: row.id,
+        manifestHash: row.manifest_hash,
+        kind,
+        sha256: hash(bytes),
+        size: bytes.length,
+        issuedAt: new Date().toISOString(),
+        custodyHead: custody.head,
+        custodyLength: custody.length,
+      }),
+    );
+  }
+  async function report(row: Row) {
+    const id = documentId();
+    const bytes = await makeReport(full(row), config.origin, Buffer.from(row.original), id);
+    issue(row, 'report', id, bytes);
+    return bytes;
+  }
   async function sendReport(row: Row, res: express.Response) {
     if (!intact(row)) return void res.status(409).json({ error: 'Échec du contrôle d’intégrité.' });
     res.setHeader('Content-Disposition', `attachment; filename="preuvix-${row.id}.pdf"`);
     res.type('application/pdf').send(await report(row));
+  }
+  function sendAnnex(row: Row, annexId: string, res: express.Response) {
+    const annex = store.annex(row.id, annexId);
+    if (!annex) return void res.status(404).json({ error: 'Pièce introuvable.' });
+    if (hash(annex.content) !== annex.signed.content.sha256)
+      return void res.status(409).json({ error: 'Échec du contrôle d’intégrité de la pièce.' });
+    const name = annex.signed.content.name.replace(/[^\w.\- ]/g, '_');
+    res.setHeader('Content-Disposition', `attachment; filename="${name}"`);
+    res
+      .type(
+        annex.signed.content.mime === 'text/plain'
+          ? 'text/plain; charset=utf-8'
+          : annex.signed.content.mime,
+      )
+      .send(Buffer.from(annex.content));
   }
   function sendOriginal(row: Row, res: express.Response) {
     if (!intact(row)) return void res.status(409).json({ error: 'Échec du contrôle d’intégrité.' });
@@ -679,13 +904,16 @@ export function createApp(
   }
   async function sendExport(row: Row, res: express.Response) {
     if (!intact(row)) return void res.status(409).json({ error: 'Échec du contrôle d’intégrité.' });
-    const proof = store.summary(row);
+    const rapport = await report(row);
+    const current = store.get(row.id)!;
+    const proof = full(current);
+    const annexes = store.signedAnnexes(row.id);
     const files: Record<string, Uint8Array> = {
       [`original.${proof.manifest.file.mime.split('/')[1]}`]: row.original,
       'manifest.json': strToU8(row.manifest),
       'manifest.sha256': strToU8(`${row.manifest_hash}  manifest.json\n`),
       'receipt.json': strToU8(JSON.stringify(proof.receipt, null, 2)),
-      'events.json': strToU8(row.events),
+      'events.json': strToU8(current.events),
       ...(proof.attestation
         ? {
             'attestation.json': strToU8(JSON.stringify(proof.attestation, null, 2)),
@@ -696,9 +924,28 @@ export function createApp(
       ...(proof.reviews?.length
         ? { 'reviews.json': strToU8(JSON.stringify(proof.reviews, null, 2)) }
         : {}),
-      'rapport.pdf': await report(row),
+      'rapport.pdf': rapport,
+      'custody.json': strToU8(JSON.stringify(store.signedCustody(row.id), null, 2)),
+      'chain.json': strToU8(JSON.stringify(proof.chain, null, 2)),
+      ...(annexes.length
+        ? {
+            'annexes.json': strToU8(
+              JSON.stringify(
+                annexes.map((annex) => annex.signed),
+                null,
+                2,
+              ),
+            ),
+            ...Object.fromEntries(
+              annexes.map(({ signed, content }) => [
+                `annexes/A${signed.content.seq}-${signed.content.name.replace(/[^\w.\- ]/g, '_')}`,
+                content,
+              ]),
+            ),
+          }
+        : {}),
       'LISEZ-MOI.txt': strToU8(
-        'ATTESTATION TECHNIQUE\nLa signature Ed25519 couvre les octets exacts de manifest.json, pas le PDF.\nVerifier avec une cle publique obtenue independamment :\nopenssl pkeyutl -verify -pubin -inkey signer-public.pem -rawin -in manifest.json -sigfile manifest.sig\nLa cle fournie dans ce ZIP ne prouve pas a elle seule l identite du signataire.\nreviews.json (si present) : verifications visuelles du defi en direct, chacune signee separement (champ payload).\nCette signature auto-generee n est pas une signature qualifiee eIDAS.\n\n' +
+        'INVENTAIRE SIGNE\nSHA256SUMS liste l empreinte de chaque fichier de cet export ; SHA256SUMS.sig est sa signature Ed25519 :\nopenssl pkeyutl -verify -pubin -inkey signer-public.pem -rawin -in SHA256SUMS -sigfile SHA256SUMS.sig\nsha256sum -c SHA256SUMS\ncustody.json : journal de conservation, chaque entree liee a la precedente (champ prev) et signee.\nannexes.json et annexes/ : pieces annexes et leurs declarations signees.\nrapport.pdf est aussi enregistre a son emission : le deposer sur /verifier-document pour le controler.\nVerification complete : node scripts/verify-export.mjs dossier-extrait [cle-de-confiance.pem]\n\nATTESTATION TECHNIQUE\nLa signature Ed25519 couvre les octets exacts de manifest.json.\nVerifier avec une cle publique obtenue independamment :\nopenssl pkeyutl -verify -pubin -inkey signer-public.pem -rawin -in manifest.json -sigfile manifest.sig\nLa cle fournie dans ce ZIP ne prouve pas a elle seule l identite du signataire.\nreviews.json (si present) : verifications visuelles du defi en direct, chacune signee separement (champ payload).\nCette signature auto-generee n est pas une signature qualifiee eIDAS.\n\n' +
           "PREUVIX — Dossier technique\nLe manifeste est fourni dans ses octets exacts : ne pas le reformater avant verification.\nComparer le SHA-256 de l'original a manifest.json, puis celui du manifeste au jeton.\nLe fichier manifest.sha256 est une aide, pas une ancre de confiance.\nAvec OpenSSL et une chaine de confiance obtenue independamment :\nopenssl ts -verify -data manifest.json -in timestamp.tsr -CAfile trusted-ca.pem\nopenssl ts -verify -queryfile timestamp.tsq -in timestamp.tsr -CAfile trusted-ca.pem\nLa qualification eIDAS exige la verification du service dans la liste de confiance a la date du jeton.\nSans timestamp.tsr : aucun horodatage independant.\nCe dossier n'atteste ni la realite de la scene ni l'absence d'IA.\nL'original peut contenir des metadonnees personnelles.\n",
       ),
     };
@@ -706,8 +953,19 @@ export function createApp(
       files['timestamp.tsq'] = row.tsq;
       files['timestamp.tsr'] = row.tsr;
     }
+    // Signed inventory: any added, removed or altered file in the export is detected.
+    const sums = strToU8(
+      Object.keys(files)
+        .sort()
+        .map((name) => `${hash(files[name])}  ${name}\n`)
+        .join(''),
+    );
+    files['SHA256SUMS'] = sums;
+    files['SHA256SUMS.sig'] = certificates.signBytes(sums);
+    const zip = Buffer.from(zipSync(files, { level: 0 }));
+    issue(row, 'export', documentId(), zip);
     res.setHeader('Content-Disposition', `attachment; filename="preuvix-${row.id}.zip"`);
-    res.type('application/zip').send(Buffer.from(zipSync(files, { level: 0 })));
+    res.type('application/zip').send(zip);
   }
   app.use('/api', (_req, res) => res.status(404).json({ error: 'Route introuvable.' }));
   const errorHandler: ErrorRequestHandler = (error, _req, res, _next) => {
@@ -725,4 +983,25 @@ export function createApp(
   };
   app.use(errorHandler);
   return app;
+}
+
+/** Annex formats recognised by their bytes, never by the declared name or type. */
+export function annexType(bytes: Buffer): string | null {
+  if (bytes.subarray(0, 5).toString('latin1') === '%PDF-') return 'application/pdf';
+  if (bytes[0] === 0xff && bytes[1] === 0xd8 && bytes[2] === 0xff) return 'image/jpeg';
+  if (bytes.subarray(0, 8).equals(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a])))
+    return 'image/png';
+  if (
+    bytes.subarray(0, 4).toString('latin1') === 'RIFF' &&
+    bytes.subarray(8, 12).toString('latin1') === 'WEBP'
+  )
+    return 'image/webp';
+  if (bytes.length && !bytes.includes(0))
+    try {
+      new TextDecoder('utf-8', { fatal: true }).decode(bytes);
+      return 'text/plain';
+    } catch {
+      return null;
+    }
+  return null;
 }

@@ -10,7 +10,7 @@ export type CertificationAssessment =
       checks: Check[];
     }
   | {
-      policy: 'preuvix-media-v2';
+      policy: 'preuvix-media-v2' | 'preuvix-media-v3';
       status:
         | 'review_required'
         | 'camera_signed'
@@ -31,6 +31,10 @@ export const certificationLabels: Record<CertificationAssessment['status'], stri
 };
 
 const CAPTURE_SOURCE = 'digitalCapture';
+// Software cameras that can inject any prepared or generated stream into the browser.
+// Substring match on purpose ("fake_device_0", "OBS Virtual Camera"); "obs" alone would hit OBSBOT webcams.
+export const VIRTUAL_CAMERA =
+  /virtual|manycam|snap camera|xsplit|mmhmm|\bndi\b|vcam|e2esoft|splitcam|youcam|camtwist|webcamoid|fake|dummy|loopback/i;
 
 // Called only after server decoding and hash/capture verification, before signing.
 export function assessCertification(manifest: Manifest): CertificationAssessment {
@@ -51,7 +55,19 @@ export function assessCertification(manifest: Manifest): CertificationAssessment
     Boolean(challenge) &&
     typeof capture?.elapsedSeconds === 'number' &&
     capture.elapsedSeconds <= challenge!.maxSeconds;
-  const review = metadataSignals || c2paInvalid || c2paAi || unverifiedMarker;
+  const deviceLabel = capture?.device?.label.trim() ?? '';
+  const virtualCamera = VIRTUAL_CAMERA.test(deviceLabel);
+  const progressive = capture?.progressive;
+  const progressiveFailed = Boolean(
+    progressive && !progressive.verified && progressive.checkpoints,
+  );
+  const review =
+    metadataSignals ||
+    c2paInvalid ||
+    c2paAi ||
+    unverifiedMarker ||
+    virtualCamera ||
+    progressiveFailed;
   const status = review
     ? 'review_required'
     : cameraSigned
@@ -105,7 +121,7 @@ export function assessCertification(manifest: Manifest): CertificationAssessment
                   detail: `Signature C2PA intègre, mais signataire hors liste de confiance (${signer}).`,
                 };
   return {
-    policy: 'preuvix-media-v2',
+    policy: 'preuvix-media-v3',
     status,
     aiAuthenticity:
       cameraSigned && !metadataSignals ? 'camera_provenance_verified' : 'not_established',
@@ -132,6 +148,31 @@ export function assessCertification(manifest: Manifest): CertificationAssessment
             : `Défi émis mais engagement trop tardif (${capture!.elapsedSeconds ?? '?'} s > ${challenge.maxSeconds} s).`
           : 'Aucun défi en direct.',
       },
+      {
+        id: 'device',
+        result: virtualCamera ? 'review' : 'unverified',
+        detail: !capture
+          ? 'Import : aucun périphérique de capture déclaré.'
+          : virtualCamera
+            ? `Caméra logicielle déclarée par le navigateur (« ${deviceLabel} ») : un flux préparé ou généré a pu être injecté.`
+            : deviceLabel
+              ? `Caméra déclarée par le navigateur : « ${deviceLabel} ». Aucune caméra virtuelle connue reconnue ; ce nom n’est pas authentifié.`
+              : 'Nom de la caméra non communiqué par le navigateur.',
+      },
+      ...(capture?.kind === 'video'
+        ? [
+            {
+              id: 'progressive',
+              result: progressive?.verified
+                ? 'passed'
+                : progressiveFailed
+                  ? 'review'
+                  : 'unverified',
+              detail:
+                progressive?.detail ?? 'Aucun engagement progressif pendant l’enregistrement.',
+            } satisfies Check,
+          ]
+        : []),
       c2paCheck,
       {
         id: 'ai_metadata',

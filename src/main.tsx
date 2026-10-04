@@ -1,5 +1,6 @@
 import React from 'react';
 import { createRoot } from 'react-dom/client';
+import { MotionConfig } from 'motion/react';
 import App from './App';
 import './styles.css';
 import '@fontsource/outfit/latin-400.css';
@@ -7,9 +8,12 @@ import '@fontsource/outfit/latin-600.css';
 import '@fontsource/syne/latin-700.css';
 import './typography.css';
 import './design.css';
+import './motion.css';
 
 createRoot(document.getElementById('root')!).render(
   <React.StrictMode>
-    <App />
+    <MotionConfig reducedMotion="user">
+      <App />
+    </MotionConfig>
   </React.StrictMode>,
 );

@@ -54,6 +54,10 @@ export type TimestampReceipt = {
 
 export type Proof = {
   id: string;
+  annexes?: import('./chain').AnnexSummary[];
+  documents?: import('./chain').DocumentSummary[];
+  custody?: import('./chain').CustodySummary;
+  chain?: import('./chain').ChainLink[];
   manifest: Manifest;
   manifestHash: string;
   status: 'pending' | 'timestamped';

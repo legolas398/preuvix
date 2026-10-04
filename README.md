@@ -43,6 +43,11 @@ npm run build
 - Empreinte SHA-256 calculée dans le navigateur avant l'envoi et affichée dans le formulaire. Le serveur refait le calcul et refuse le dépôt si les empreintes diffèrent. L'API de dépôt exige maintenant le champ `clientSha256` ; recharger les anciens onglets après mise à jour.
 - Validation réelle des signatures C2PA (Content Credentials) des appareils compatibles : intégrité, signataire (liste de confiance via `C2PA_TRUST_ANCHORS`) et type de source déclaré. Une signature de confiance déclarant une capture numérique donne le statut « signature d'appareil vérifiée » ; une signature cassée ou une génération IA déclarée impose un examen.
 - Défi en direct à la capture (code et geste aléatoires, 180 s) et vérifications visuelles signées séparément.
+- Démarche guidée en cinq étapes (Capturer, Sceller, Décrire, Annexes, Certifier) et **chaîne de preuve** recontrôlée à chaque ouverture, de la prise de vue aux documents émis.
+- Vidéo : engagement progressif (chaîne d’empreintes envoyée toutes les 3 s pendant l’enregistrement, revérifiée au dépôt). Caméras logicielles connues (OBS, ManyCam…) signalées et soumises à examen.
+- Pièces annexes (PDF, images, texte, EML) scellées : empreinte recalculée, déclaration signée liée au manifeste, ajout définitif.
+- Journal de conservation signé et chaîné : chaque événement contient l’empreinte du précédent ; toute altération rompt la chaîne.
+- Chaque rapport PDF et export ZIP est numéroté, signé et vérifiable sur `/verifier-document` ; l’export contient un inventaire signé `SHA256SUMS`.
 - Copie protégée par filigrane invisible TrustMark et vérification d’une copie en circulation (dossier d’origine, zones retouchées).
 - Rapport de certification PDF identifié PREUVIX (processus daté, contrôles, certificat final) et lien privé, révocable et limité dans le temps pour un commissaire de justice.
 - Inspection limitée de métadonnées pour indices déclaratifs d'outils IA. **Aucun détecteur visuel « réel/faux ».** Un marqueur peut être falsifié et son absence ne prouve rien.

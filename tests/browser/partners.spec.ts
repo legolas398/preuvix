@@ -66,7 +66,9 @@ test('partner search, filtering and local request preparation', async ({ page })
     'https://example.invalid/lyon',
   );
   await page.setViewportSize({ width: 320, height: 740 });
-  await expect.poll(() => page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+  await expect
+    .poll(() => page.evaluate(() => document.documentElement.scrollWidth <= innerWidth))
+    .toBe(true);
   await page.locator('.partner-directory').screenshot({ path: 'test-results/partners-mobile.png' });
 });
 

@@ -8,10 +8,15 @@ import {
   ShieldCheck,
   TriangleAlert,
 } from 'lucide-react';
-import type { RecipientDossier } from '../shared/types';
+import type { Proof, RecipientDossier } from '../shared/types';
 import { certificationLabels } from '../shared/certification-policy';
 import { shortId } from '../shared/format';
 import { api } from './api';
+import { motion } from 'motion/react';
+import { HashReveal } from './motion';
+import ChainOfCustody from './ChainOfCustody';
+import AnnexPanel from './AnnexPanel';
+import DocumentCheck from './DocumentCheck';
 import './protection.css';
 
 const date = (value: string) =>
@@ -59,19 +64,28 @@ export default function RecipientPage({ token }: { token: string }) {
         )}
         {!dossier && !error && <LoaderCircle className="spin" aria-label="Chargement" />}
         {dossier && proof && manifest && (
-          <>
+          <motion.div
+            initial={{ opacity: 0, y: 16 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.5, ease: [0.22, 1, 0.36, 1] }}
+          >
             <h1>{manifest.title}</h1>
             <p>
               {shortId(proof.id)} · déposé le {date(manifest.receivedAt)} · transmis à{' '}
               <strong>{dossier.label}</strong> · accessible jusqu’au {date(dossier.expiresAt)}
             </p>
-            <div className="recipient-media">
+            <motion.div
+              className="recipient-media"
+              initial={{ opacity: 0, scale: 0.97, clipPath: 'inset(8% 8% 8% 8% round 14px)' }}
+              animate={{ opacity: 1, scale: 1, clipPath: 'inset(0% 0% 0% 0% round 0px)' }}
+              transition={{ duration: 0.8, ease: [0.22, 1, 0.36, 1], delay: 0.1 }}
+            >
               {manifest.file.mime.startsWith('video/') ? (
                 <video src={`${base}/original`} controls playsInline preload="metadata" />
               ) : (
                 <img src={`${base}/original`} alt={`Original du dossier ${shortId(proof.id)}`} />
               )}
-            </div>
+            </motion.div>
             <div className="recipient-downloads">
               <a className="button primary" href={`${base}/report`}>
                 <FileCheck2 size={17} /> Rapport de certification (PDF)
@@ -99,6 +113,8 @@ export default function RecipientPage({ token }: { token: string }) {
                 </p>
               </div>
             </div>
+            {proof.chain && <ChainOfCustody chain={proof.chain} custody={proof.custody} />}
+            <AnnexPanel proof={proof as Proof} downloadBase={`${base}/annexes`} />
             {manifest.certification && (
               <section className="detail-section">
                 <h3>
@@ -107,13 +123,23 @@ export default function RecipientPage({ token }: { token: string }) {
                 <p className="recipient-status">
                   {certificationLabels[manifest.certification.status]}
                 </p>
-                <ul className="recipient-checks">
+                <motion.ul
+                  className="recipient-checks"
+                  initial="hidden"
+                  whileInView="show"
+                  viewport={{ once: true }}
+                  variants={{ hidden: {}, show: { transition: { staggerChildren: 0.06 } } }}
+                >
                   {manifest.certification.checks.map((check) => (
-                    <li key={check.id} className={check.result}>
+                    <motion.li
+                      key={check.id}
+                      className={check.result}
+                      variants={{ hidden: { opacity: 0, x: -10 }, show: { opacity: 1, x: 0 } }}
+                    >
                       <strong>{resultLabel[check.result]}</strong> — {check.detail}
-                    </li>
+                    </motion.li>
                   ))}
-                </ul>
+                </motion.ul>
                 {(proof.reviews ?? []).map(({ review, signature }) => (
                   <p key={signature}>
                     <strong>{outcomeLabel[review.outcome]}</strong> — vérification visuelle du{' '}
@@ -138,11 +164,11 @@ export default function RecipientPage({ token }: { token: string }) {
               <h3>Empreintes</h3>
               <div className="hash-box">
                 <span>SHA-256 DE L’ORIGINAL</span>
-                <code>{manifest.file.sha256}</code>
+                <HashReveal value={manifest.file.sha256} />
               </div>
               <div className="hash-box">
                 <span>SHA-256 DU MANIFESTE SIGNÉ</span>
-                <code>{proof.manifestHash}</code>
+                <HashReveal value={proof.manifestHash} />
               </div>
               <p>
                 {proof.receipt
@@ -159,13 +185,14 @@ export default function RecipientPage({ token }: { token: string }) {
                 </p>
               </section>
             )}
+            <DocumentCheck />
             <p className="recipient-boundary">
               Ce dossier documente l’intégrité et le processus de dépôt d’un fichier. Il ne
               constitue pas un constat et ne certifie pas la réalité de la scène : vos propres
               constatations restent seules à faire foi. Pour une vérification indépendante, extrayez
               l’export ZIP et suivez le fichier LISEZ-MOI.
             </p>
-          </>
+          </motion.div>
         )}
       </main>
     </div>

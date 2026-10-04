@@ -54,7 +54,9 @@ test('welcome themes persist, rights switch and free/premium actions work', asyn
   await page.setViewportSize({ width: 320, height: 740 });
   const overflowing = await page.evaluate(() =>
     [...document.querySelectorAll('main *')]
-      .filter((el) => !el.closest('.leaflet-pane') && el.getBoundingClientRect().right > innerWidth + 1)
+      .filter(
+        (el) => !el.closest('.leaflet-pane') && el.getBoundingClientRect().right > innerWidth + 1,
+      )
       .map((el) => el.className),
   );
   expect(overflowing).toEqual([]);

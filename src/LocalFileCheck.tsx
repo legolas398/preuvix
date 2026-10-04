@@ -1,6 +1,8 @@
 import { useEffect, useId, useState } from 'react';
 import { CheckCheck, Fingerprint, LoaderCircle, Upload, X } from 'lucide-react';
+import { AnimatePresence, motion } from 'motion/react';
 import { sha256File } from './file-hash';
+import { HashReveal, Verdict } from './motion';
 
 export default function LocalFileCheck({ expectedHash }: { expectedHash?: string }) {
   const id = useId();
@@ -9,6 +11,7 @@ export default function LocalFileCheck({ expectedHash }: { expectedHash?: string
   const [calculated, setCalculated] = useState('');
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
+  const [dragging, setDragging] = useState(false);
   const target = (expectedHash ?? expected).trim().toLowerCase();
   const validTarget = /^[a-f0-9]{64}$/.test(target);
   useEffect(() => {
@@ -64,9 +67,32 @@ export default function LocalFileCheck({ expectedHash }: { expectedHash?: string
           )}
         </div>
       )}
-      <label className="button secondary file-button">
-        {busy ? <LoaderCircle className="spin" size={17} /> : <Upload size={17} />} Choisir une
-        copie à vérifier
+      <label
+        className={`drop-zone ${dragging ? 'dragging' : ''}`}
+        onDragOver={(e) => {
+          e.preventDefault();
+          setDragging(true);
+        }}
+        onDragLeave={() => setDragging(false)}
+        onDrop={(e) => {
+          e.preventDefault();
+          setDragging(false);
+          const dropped = e.dataTransfer.files?.[0];
+          if (dropped) {
+            setCalculated('');
+            setFile(dropped);
+          }
+        }}
+      >
+        <motion.span
+          className="drop-icon"
+          animate={dragging ? { scale: 1.12, rotate: -6 } : { scale: 1, rotate: 0 }}
+          transition={{ type: 'spring', stiffness: 320, damping: 18 }}
+        >
+          {busy ? <LoaderCircle className="spin" size={22} /> : <Upload size={22} />}
+        </motion.span>
+        <strong>{dragging ? 'Déposez le fichier ici' : 'Choisir une copie à vérifier'}</strong>
+        <small>ou glissez-déposez un fichier · rien n’est envoyé</small>
         <input
           type="file"
           aria-label="Copie à vérifier en privé"
@@ -80,6 +106,18 @@ export default function LocalFileCheck({ expectedHash }: { expectedHash?: string
         />
       </label>
       {file && <p className="local-filename">{file.name}</p>}
+      <AnimatePresence>
+        {busy && (
+          <motion.div
+            className="scan-line"
+            aria-hidden="true"
+            initial={{ opacity: 0, scaleX: 0.2 }}
+            animate={{ opacity: [0.4, 1, 0.4], scaleX: [0.2, 1, 0.2] }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 1.1, repeat: Infinity }}
+          />
+        )}
+      </AnimatePresence>
       {error && (
         <p className="local-error" role="alert">
           {error}
@@ -89,22 +127,19 @@ export default function LocalFileCheck({ expectedHash }: { expectedHash?: string
         <>
           <div className="hash-box">
             <span>EMPREINTE CALCULÉE SUR VOTRE COPIE</span>
-            <code>{calculated}</code>
+            <HashReveal value={calculated} />
           </div>
           {validTarget ? (
-            <div className={`comparison ${matches ? 'match' : 'mismatch'}`} role="status">
-              {matches ? <CheckCheck size={21} /> : <X size={21} />}
-              <div>
-                <strong>
-                  {matches ? 'Correspondance exacte des octets' : 'Le fichier est différent'}
-                </strong>
-                <p>
-                  {matches
-                    ? 'Cette copie correspond à l’empreinte attendue. Cela ne prouve ni la date de capture ni la réalité de la scène.'
-                    : 'Une modification, une compression ou un autre fichier peuvent expliquer cette différence.'}
-                </p>
-              </div>
-            </div>
+            <Verdict match={matches} icon={matches ? <CheckCheck size={21} /> : <X size={21} />}>
+              <strong>
+                {matches ? 'Correspondance exacte des octets' : 'Le fichier est différent'}
+              </strong>
+              <p>
+                {matches
+                  ? 'Cette copie correspond à l’empreinte attendue. Cela ne prouve ni la date de capture ni la réalité de la scène.'
+                  : 'Une modification, une compression ou un autre fichier peuvent expliquer cette différence.'}
+              </p>
+            </Verdict>
           ) : (
             <p>
               Empreinte calculée. Ajoutez une empreinte de référence pour comparer les fichiers.

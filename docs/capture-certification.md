@@ -9,6 +9,44 @@ Le protocole accepte une photo (JPEG, PNG, WebP, 10 Mo) ou une vidéo (MP4/WebM,
 5. Si un prestataire RFC 3161 est configuré, le manifeste est soumis à l’horodatage existant. Sinon le statut reste « en attente ». Aucune date qualifiée n’est inventée.
 6. Le PDF imprimable décrit les contrôles, les déclarations, les empreintes, la signature et les limites. Le ZIP contient l’original, le manifeste exact, sa signature, la clé publique, l’attestation JSON, le PDF et, si obtenu, le jeton d’horodatage.
 
+## Démarche en cinq étapes
+
+La création d’une preuve suit cinq étapes visibles dans l’application ; chacune ajoute un maillon vérifiable à la **chaîne de preuve** affichée dans le dossier, la page destinataire et le rapport.
+
+| Étape        | Ce qui se passe                                                                                          | Maillon vérifié                                       |
+| ------------ | -------------------------------------------------------------------------------------------------------- | ----------------------------------------------------- |
+| 1. Capturer  | Caméra PREUVIX (session, défi, caméra déclarée, engagement progressif en vidéo) ou import                | Prise de vue, défi, enregistrement progressif         |
+| 2. Sceller   | SHA-256 calculé sur l’appareil ; en capture, empreinte déjà engagée auprès du serveur                    | Original conservé                                     |
+| 3. Décrire   | Titre, contexte et déclaration de bonne foi, figés dans le manifeste                                     | Manifeste signé                                       |
+| 4. Annexes   | Pièces justificatives hachées localement, puis scellées une à une                                        | Pièces annexes                                        |
+| 5. Certifier | Recalcul, décodage, évaluation `preuvix-media-v3`, signature, horodatage, scellement des pièces, journal | Analyse de provenance, horodatage, journal, documents |
+
+Chaque maillon est **recontrôlé à chaque ouverture** (octets, signatures, clés de l’installation) : rien n’est mis en cache. Un maillon peut être vérifié, en attente, à examiner, rompu ou non établi.
+
+## Engagement progressif des vidéos
+
+Pendant l’enregistrement, le navigateur calcule une chaîne d’empreintes sur les segments produits par `MediaRecorder` : `h₀ = SHA-256("preuvix-progressive-v1:" + nonce de session)`, puis `hᵢ = SHA-256(hᵢ₋₁ + SHA-256(segmentᵢ))`. Toutes les 3 secondes, il envoie au serveur le nombre de segments, la taille cumulée et `hᵢ` ; le serveur les date à réception. À l’engagement final, le navigateur déclare la taille de chaque segment.
+
+Au dépôt, le serveur redécoupe le fichier reçu, recalcule chaque point et vérifie leur chronologie. Les points doivent couvrir l’essentiel de la durée (au moins `min(60 %, durée − 6 s)`). Une vidéo préparée à l’avance et injectée d’un coup produit des points concentrés dans la même seconde ; un fichier remplacé ne correspond plus aux points. Dans les deux cas, le contrôle `progressive` passe « à examiner » et le dossier `review_required`. Limite : un flux généré en temps réel et poussé au rythme réel reste possible ; le défi en direct reste nécessaire.
+
+## Caméra déclarée et caméras logicielles
+
+Le nom et les réglages de la piste vidéo (`MediaStreamTrack.label`, `getSettings()`) sont figés dans l’engagement et le manifeste. Un nom de caméra logicielle connue (OBS Virtual Camera, ManyCam, Snap Camera, XSplit VCam, mmhmm, NDI, e2eSoft VCam, SplitCam, YouCam, CamTwist, Webcamoid, périphériques « fake », « dummy » ou « loopback ») impose `review_required` et l’interface prévient avant la prise de vue. Ce nom est fourni par le navigateur : son absence de la liste ne prouve pas une caméra physique.
+
+## Pièces annexes
+
+Factures, contrats, courriers, échanges : jusqu’à 30 pièces de 10 Mo par dossier, reconnues par leurs octets (PDF, JPEG, PNG, WebP, texte UTF-8 dont EML et CSV). Comme pour le média, l’empreinte est calculée dans le navigateur puis recalculée ; le dépôt est refusé si elles diffèrent. Chaque pièce reçoit une déclaration signée `preuvix-annex-v1` (nom, type, taille, SHA-256, note, rang, empreinte du manifeste), est conservée sans transformation, ne peut être ni modifiée ni retirée (triggers SQLite) et est inscrite au journal. Elle apparaît dans le rapport, la page destinataire et l’export (`annexes.json`, dossier `annexes/`). La date d’ajout est celle du serveur, pas un horodatage indépendant ; la pièce n’est pas couverte par le jeton RFC 3161 du manifeste.
+
+## Journal de conservation signé
+
+Chaque événement du dossier — session et défi, engagement, réception, signature, horodatage, vérification du défi, pièce annexe, document émis, copie protégée, partage, lien destinataire, consultation — devient une entrée `preuvix-custody-v1` numérotée, contenant le SHA-256 de l’entrée précédente et signée en Ed25519. Le serveur parcourt tout le journal à chaque lecture : une entrée supprimée, modifiée, réordonnée ou signée par une clé étrangère à l’installation rompt la chaîne, même pour quelqu’un ayant un accès direct à la base. Les dossiers antérieurs reçoivent une entrée `custody_opened` sans antidater les événements passés. Limite : l’exploitant qui détient la clé privée peut réécrire un journal complet ; l’ancre externe reste le jeton d’horodatage et les documents déjà remis.
+
+## Documents émis et vérifiables
+
+Chaque rapport PDF et chaque export ZIP reçoit un numéro `DOC-XXXX-XXXX-XXXX` (imprimé sur chaque page du rapport), puis son empreinte est signée (`preuvix-document-v1`, avec la tête du journal à l’émission) et inscrite au journal. La page publique `/verifier-document`, la page destinataire et l’écran « Vérifier un fichier » calculent l’empreinte localement et indiquent si le fichier est exactement un document émis, pour quel dossier, à quelle date et si ce dossier est toujours intègre. Un PDF retouché, réenregistré ou numérisé n’est plus reconnu. L’écran privé reconnaît aussi un original ou une pièce annexe.
+
+L’export contient en outre `SHA256SUMS` (empreinte de chaque fichier) et sa signature `SHA256SUMS.sig`, `custody.json` et `chain.json`. `scripts/verify-export.mjs` vérifie l’inventaire signé (aucun fichier ajouté, retiré ou modifié), le journal, les pièces annexes, le manifeste et les vérifications de défi.
+
 ## Défi en direct
 
 Un média préparé à l’avance, ou généré, ne peut pas contenir un code tiré au hasard quelques secondes avant sa capture. Le défi (code, geste, délai entre l’émission et l’engagement) est figé dans le manifeste signé. Si l’engagement intervient dans le délai, le dossier reçoit le statut `capture_challenged`. Sa présence dans l’image reste à **vérifier visuellement** : dans le dossier, un vérificateur indique « visible et conforme », « absent ou non conforme » ou « illisible ». Chaque vérification est signée séparément (Ed25519, `preuvix-challenge-review-v1`), liée à l’empreinte du manifeste, conservée en ajout seul et exportée dans `reviews.json`. Le nom du vérificateur est déclaré, pas authentifié. La vérification d’un tiers indépendant a plus de poids que celle du déposant.
@@ -28,9 +66,9 @@ Certains appareils (Leica, Sony, Nikon, Canon, Google Pixel, Samsung récents…
 
 Pour activer la confiance, télécharger la liste de confiance C2PA officielle (PEM) et renseigner son chemin dans `C2PA_TRUST_ANCHORS`. Sans ancre, aucun signataire n’est présenté comme de confiance. La caméra du navigateur ne produit pas de C2PA : ce statut concerne les imports depuis un appareil compatible. Une signature d’appareil atteste l’origine matérielle, pas la scène : un écran ou une mise en scène photographiés restent possibles.
 
-## Politique `preuvix-media-v2`
+## Politique `preuvix-media-v3`
 
-Statuts, du plus fort au plus faible : `camera_signed` (signature d’appareil de confiance), `capture_challenged` (session et défi dans le délai), `capture_documented` (session sans défi valable), `integrity_only` (import). `review_required` l’emporte dès qu’un indice IA, une signature C2PA invalide ou une IA déclarée apparaît. `aiAuthenticity` vaut `camera_provenance_verified` uniquement pour `camera_signed` ; sinon `not_established`. Les dossiers `preuvix-media-v1` restent lisibles sans modification.
+La v3 reprend la v2 et ajoute les contrôles `device` (caméra déclarée) et, pour les vidéos capturées, `progressive` (engagement progressif). Une caméra logicielle reconnue ou un engagement progressif incohérent imposent `review_required`. Statuts, du plus fort au plus faible : `camera_signed` (signature d’appareil de confiance), `capture_challenged` (session et défi dans le délai), `capture_documented` (session sans défi valable), `integrity_only` (import). `review_required` l’emporte dès qu’un indice IA, une signature C2PA invalide ou une IA déclarée apparaît. `aiAuthenticity` vaut `camera_provenance_verified` uniquement pour `camera_signed` ; sinon `not_established`. Les dossiers `preuvix-media-v1` et `preuvix-media-v2` restent lisibles sans modification.
 
 ## Copie protégée contre les détournements
 
@@ -56,7 +94,7 @@ Depuis un dossier, « Envoyer à un commissaire de justice » crée un lien priv
 
 ## Vérification indépendante
 
-Extraire le ZIP puis exécuter `node scripts/verify-export.mjs chemin-du-dossier`. Un troisième argument facultatif désigne une clé publique obtenue par un canal de confiance. Le script vérifie les octets de l’original, la signature du manifeste et les vérifications de défi signées, mais pas le jeton RFC 3161. Pour ce dernier, suivre le fichier LISEZ-MOI dans le ZIP avec une chaîne de confiance indépendante.
+Extraire le ZIP puis exécuter `node scripts/verify-export.mjs chemin-du-dossier`. Un troisième argument facultatif désigne une clé publique obtenue par un canal de confiance. Le script vérifie l’inventaire signé `SHA256SUMS`, les octets de l’original, la signature du manifeste, le journal de conservation, les pièces annexes et les vérifications de défi signées, mais pas le jeton RFC 3161. Avec une clé de confiance en troisième argument, toutes les signatures doivent provenir de cette clé. Pour ce dernier, suivre le fichier LISEZ-MOI dans le ZIP avec une chaîne de confiance indépendante.
 
 La signature porte sur `manifest.json`, pas sur le PDF. La clé est auto-générée pour cette installation, dans `DATA_DIR/attestation-ed25519.pem`. Sauvegarder cette clé de manière confidentielle avec les données ; ne jamais la publier. La clé publique et son empreinte sont disponibles sur `/api/certification/key`. Une clé incluse dans un ZIP ne prouve pas, à elle seule, l’identité de son signataire. Ce mécanisme n’est ni un certificat d’identité émis par un tiers ni une signature qualifiée eIDAS.
 

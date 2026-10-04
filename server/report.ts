@@ -13,6 +13,7 @@ import type { Proof } from '../shared/types';
 import { certificationLabels } from '../shared/certification-policy';
 import { shortId } from '../shared/format';
 import { hash } from './integrity';
+import { custodyLabels } from '../shared/chain';
 
 const require = createRequire(import.meta.url);
 const ffmpeg = require('ffmpeg-static') as string;
@@ -268,7 +269,21 @@ class Layout {
   }
 }
 
-export async function makeReport(proof: Proof, origin: string, original: Buffer) {
+const chainResult = {
+  verified: 'passed',
+  failed: 'review',
+  warning: 'review',
+  pending: 'pending',
+  absent: 'unverified',
+} as const;
+const custodyName = (kind: string) => custodyLabels[kind] ?? kind;
+
+export async function makeReport(
+  proof: Proof,
+  origin: string,
+  original: Buffer,
+  documentId?: string,
+) {
   const pdf = await PDFDocument.create();
   pdf.registerFontkit(fontkit);
   const fonts = {
@@ -299,14 +314,19 @@ export async function makeReport(proof: Proof, origin: string, original: Buffer)
     page.drawText(text, { x: W - M - font.widthOfTextAtSize(text, size), y, size, font, color });
   right('RAPPORT DE CERTIFICATION', H - 44, 9, fonts.bold, C.white);
   right(`Réf. ${reference}`, H - 58, 8.5, fonts.body, rgb(1, 0.85, 0.72));
-  right(`Dossier ${id}`, H - 71, 8.5, fonts.body, rgb(1, 0.85, 0.72));
+  right(
+    documentId ? `Dossier ${id} · Document ${documentId}` : `Dossier ${id}`,
+    H - 71,
+    8.5,
+    fonts.body,
+    rgb(1, 0.85, 0.72),
+  );
   doc.y = H - 120;
 
   // ── Title, status and preview ──
   const preview = await thumbnail(proof, original);
   let image: PDFImage | null = null;
-  if (preview)
-    image = await pdf.embedJpg(preview).catch(() => null); // The report stays valid without it.
+  if (preview) image = await pdf.embedJpg(preview).catch(() => null); // The report stays valid without it.
   const textWidth = image ? CONTENT - 190 : CONTENT;
   const top = doc.y;
   doc.text(manifest.title, { size: 20, font: fonts.display, width: textWidth, gap: 2 });
@@ -444,6 +464,14 @@ export async function makeReport(proof: Proof, origin: string, original: Buffer)
       `Le navigateur a calculé le SHA-256 du média et l’a engagé ${capture.elapsedSeconds !== undefined ? `${capture.elapsedSeconds} s après l’émission du défi (limite ${capture.challenge?.maxSeconds ?? '-'} s)` : 'pendant la session'}. Cet engagement est immuable.`,
       paris(capture.committedAt),
     );
+    if (checks.device)
+      doc.step(checks.device.result as Result, 'Caméra utilisée', checks.device.detail);
+    if (checks.progressive)
+      doc.step(
+        checks.progressive.result as Result,
+        'Engagement progressif de la vidéo',
+        checks.progressive.detail,
+      );
   } else
     doc.step(
       'unverified',
@@ -525,9 +553,68 @@ export async function makeReport(proof: Proof, origin: string, original: Buffer)
       });
   }
 
-  // ── 4. Declarations ──
+  // ── 4. Annexes ──
+  const annexes = proof.annexes ?? [];
+  if (annexes.length) {
+    doc.heading('04', 'Pièces annexes scellées');
+    doc.text(
+      'Chaque pièce est hachée dans le navigateur, recalculée par le serveur, conservée sans transformation et décrite par une déclaration signée liée au manifeste. Une pièce modifiée ne correspond plus à son empreinte.',
+      { size: 8.5, color: C.muted, gap: 8 },
+    );
+    for (const annex of annexes)
+      doc.step(
+        annex.signatureValid && annex.contentMatches ? 'passed' : 'review',
+        `A${annex.seq} · ${annex.name}`,
+        `${annex.mime} · ${annex.size < 1024 ? `${annex.size} octets` : `${(annex.size / 1024).toLocaleString('fr-FR', { maximumFractionDigits: 1 })} Ko`} · SHA-256 ${annex.sha256}${annex.note ? `\nNote du déposant : ${annex.note}` : ''}`,
+        `Scellée le ${paris(annex.addedAt)}`,
+      );
+  }
+
+  // ── 5. Chain of custody ──
+  if (proof.chain?.length || proof.custody?.length) {
+    doc.heading('05', 'Chaîne de conservation');
+    for (const link of proof.chain ?? [])
+      if (link.id === 'documents' && documentId)
+        // This report is itself the document being issued: describe it rather than the past.
+        doc.step(
+          link.state === 'failed' ? 'review' : 'passed',
+          link.label,
+          `Ce rapport (n° ${documentId}) est enregistré et signé à son émission${
+            proof.documents?.length
+              ? `, après ${proof.documents.length} document${proof.documents.length > 1 ? 's' : ''} déjà émis`
+              : ''
+          }. ${link.state === 'failed' ? link.detail : ''}`.trim(),
+          paris(new Date().toISOString()),
+        );
+      else
+        doc.step(
+          chainResult[link.state],
+          link.label,
+          link.detail,
+          link.at ? paris(link.at) : undefined,
+        );
+    const custody = proof.custody;
+    if (custody?.length) {
+      doc.text(
+        `Journal signé : ${custody.length} événements, chacun lié au précédent par son empreinte SHA-256 et signé (Ed25519). Tête du journal à l’émission : ${custody.head}.`,
+        { size: 8.5, color: C.muted, gap: 6 },
+      );
+      for (const entry of custody.entries.slice(-40))
+        doc.text(`${paris(entry.at)} · n° ${entry.seq} · ${custodyName(entry.kind)}`, {
+          size: 8,
+          gap: 1,
+        });
+      if (custody.length > 40)
+        doc.text(`(${custody.length - 40} événements antérieurs dans custody.json de l’export)`, {
+          size: 8,
+          color: C.muted,
+        });
+    }
+  }
+
+  // ── 6. Declarations ──
   if (manifest.declaration || manifest.description) {
-    doc.heading('04', 'Déclarations du déposant');
+    doc.heading('06', 'Déclarations du déposant');
     if (manifest.declaration) {
       doc.field('Auteur déclaré', `${manifest.declaration.author} (identité non vérifiée)`);
       doc.field('Contexte', manifest.declaration.context);
@@ -537,7 +624,7 @@ export async function makeReport(proof: Proof, origin: string, original: Buffer)
   }
 
   // ── 5. Scope ──
-  doc.heading('05', 'Portée du rapport');
+  doc.heading('07', 'Portée du rapport');
   doc.text(
     'Établi : la correspondance exacte des octets avec l’empreinte enregistrée, l’intégrité du manifeste signé, le déroulé du processus ci-dessus et, le cas échéant, la signature d’appareil et l’horodatage.',
     { size: 9 },
@@ -552,7 +639,7 @@ export async function makeReport(proof: Proof, origin: string, original: Buffer)
   );
 
   // ── 6. Verification ──
-  doc.heading('06', 'Vérifier ce dossier');
+  doc.heading('08', 'Vérifier ce dossier');
   const verifyUrl = proof.shareToken ? `${origin}/verification/${proof.shareToken}` : null;
   const qrSize = 92;
   if (verifyUrl) doc.ensure(qrSize + 10);
@@ -570,6 +657,11 @@ export async function makeReport(proof: Proof, origin: string, original: Buffer)
     `3. Comparer l’empreinte de la clé publique avec celle publiée par l’exploitant : ${proof.attestation?.keyId ?? 'non signée'}`,
     { size: 9, width: verifyWidth },
   );
+  if (documentId)
+    doc.text(
+      `4. Vérifier ce PDF lui-même : le déposer sur ${origin}/verifier-document. Son empreinte est enregistrée et signée sous le n° ${documentId} ; une copie modifiée, même d’un seul caractère, ne sera pas reconnue.`,
+      { size: 9, width: verifyWidth },
+    );
   if (verifyUrl) {
     doc.text(`Page de vérification publique : ${verifyUrl}`, {
       size: 8,
@@ -590,6 +682,13 @@ export async function makeReport(proof: Proof, origin: string, original: Buffer)
   const lines: [string, string][] = [
     ['Dossier', `${id} — ${proof.id}`],
     ['Référence du rapport', reference],
+    ...(documentId ? ([['Document n°', documentId]] as [string, string][]) : []),
+    ...(proof.custody?.length
+      ? ([['Tête du journal', `${proof.custody.head} (${proof.custody.length} événements)`]] as [
+          string,
+          string,
+        ][])
+      : []),
     ['Statut', certification ? certificationLabels[certification.status] : 'Dossier antérieur'],
     ['Manifeste SHA-256', proof.manifestHash],
     ['Clé de signature', proof.attestation?.keyId ?? 'aucune'],
@@ -689,13 +788,16 @@ export async function makeReport(proof: Proof, origin: string, original: Buffer)
       thickness: 0.5,
       color: C.line,
     });
-    current.drawText(`PREUVIX · Rapport de certification · ${id} · ${reference}`, {
-      x: M,
-      y: 30,
-      size: 7.5,
-      font: fonts.body,
-      color: C.muted,
-    });
+    current.drawText(
+      `PREUVIX · Rapport de certification · ${id} · ${reference}${documentId ? ` · ${documentId}` : ''}`,
+      {
+        x: M,
+        y: 30,
+        size: 7.5,
+        font: fonts.body,
+        color: C.muted,
+      },
+    );
     const label = `Page ${index + 1} / ${pages.length}`;
     current.drawText(label, {
       x: W - M - fonts.body.widthOfTextAtSize(label, 7.5),
@@ -707,7 +809,7 @@ export async function makeReport(proof: Proof, origin: string, original: Buffer)
   });
   pdf.setTitle(`PREUVIX — Rapport de certification ${id}`);
   pdf.setAuthor('PREUVIX');
-  pdf.setSubject(`Dossier ${proof.id} · ${reference}`);
+  pdf.setSubject(`Dossier ${proof.id} · ${reference}${documentId ? ` · ${documentId}` : ''}`);
   pdf.setProducer('PREUVIX open source');
   pdf.setCreator('PREUVIX');
   return Buffer.from(await pdf.save());
@@ -719,6 +821,8 @@ const checkTitles: Record<string, string> = {
   capture: 'Session de capture',
   challenge: 'Défi en direct',
   c2pa: 'Signature d’appareil C2PA',
+  device: 'Caméra utilisée',
+  progressive: 'Engagement progressif de la vidéo',
   ai_metadata: 'Indices IA dans les métadonnées',
   physical_origin: 'Origine physique',
 };

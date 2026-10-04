@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
-import type { CaptureSession } from '../shared/capture';
-import { sha256File } from './file-hash';
+import { CHAIN_LABEL, type CaptureSession } from '../shared/capture';
+import { VIRTUAL_CAMERA } from '../shared/certification-policy';
+import { sha256File, sha256Hex } from './file-hash';
 import './capture.css';
 
 async function post<T>(url: string, body: unknown): Promise<T> {
@@ -13,6 +14,20 @@ async function post<T>(url: string, body: unknown): Promise<T> {
   if (!response.ok) throw new Error(result.error || 'Session indisponible.');
   return result;
 }
+// Seconds between progressive checkpoints while a video records.
+const CHECKPOINT_EVERY = 3;
+type Device = { label: string; width?: number; height?: number; frameRate?: number };
+function describeDevice(media: MediaStream): Device {
+  const track = media.getVideoTracks()[0];
+  const settings = track?.getSettings?.() ?? {};
+  return {
+    label: (track?.label ?? '').slice(0, 200),
+    ...(settings.width ? { width: Math.round(settings.width) } : {}),
+    ...(settings.height ? { height: Math.round(settings.height) } : {}),
+    ...(settings.frameRate ? { frameRate: Math.round(settings.frameRate * 100) / 100 } : {}),
+  };
+}
+
 export default function CapturePanel({
   onCapture,
   close,
@@ -34,6 +49,9 @@ export default function CapturePanel({
   const [attempt, setAttempt] = useState(0);
   const [seconds, setSeconds] = useState(0);
   const [now, setNow] = useState(() => Date.now());
+  const [device, setDevice] = useState<Device | null>(null);
+  const [checkpoints, setCheckpoints] = useState(0);
+  const virtual = Boolean(device?.label && VIRTUAL_CAMERA.test(device.label));
   useEffect(() => {
     const interval = setInterval(() => setNow(Date.now()), 1000);
     return () => clearInterval(interval);
@@ -72,6 +90,7 @@ export default function CapturePanel({
         return;
       }
       stream.current = media;
+      setDevice(describeDevice(media));
       if (video.current) video.current.srcObject = media;
       const issued = await post<CaptureSession>('/api/captures', {});
       if (!cancelled) setSession(issued);
@@ -96,14 +115,27 @@ export default function CapturePanel({
     const interval = setInterval(() => setSeconds((value) => value + 1), 1000);
     return () => clearInterval(interval);
   }, [recording]);
-  async function finish(file: File, kind: 'photo' | 'video', startedAt: string, endedAt: string) {
+  async function finish(
+    file: File,
+    kind: 'photo' | 'video',
+    startedAt: string,
+    endedAt: string,
+    segments?: number[],
+  ) {
     if (!session || !alive.current) return;
     setBusy(true);
     setError('');
     try {
       const sha256 = await sha256File(file);
       if (!alive.current) return;
-      await post(`/api/captures/${session.id}/commit`, { sha256, kind, startedAt, endedAt });
+      await post(`/api/captures/${session.id}/commit`, {
+        sha256,
+        kind,
+        startedAt,
+        endedAt,
+        ...(device ? { device } : {}),
+        ...(segments ? { segments } : {}),
+      });
       if (alive.current) onCapture(file, session.id);
     } catch (e) {
       if (alive.current)
@@ -161,12 +193,43 @@ export default function CapturePanel({
       let length = 0;
       let invalid = false;
       const startedAt = new Date().toISOString();
+      // Progressive commitment: a hash chain over the chunks, sent to the server while recording.
+      const sessionId = session!.id;
+      let chain = sha256Hex(`${CHAIN_LABEL}:${session!.nonce}`);
+      let lastCheckpoint = Date.now();
+      let sent = Promise.resolve();
+      setCheckpoints(0);
       active.ondataavailable = (event) => {
+        if (!event.data.size) return;
         length += event.data.size;
         if (length > 50 * 1024 * 1024) {
           invalid = true;
           if (active.state === 'recording') active.stop();
-        } else chunks.push(event.data);
+          return;
+        }
+        chunks.push(event.data);
+        const data = event.data;
+        const count = chunks.length;
+        const offset = length;
+        chain = chain.then(async (previous) =>
+          sha256Hex(previous + (await sha256Hex(await data.arrayBuffer()))),
+        );
+        if (Date.now() - lastCheckpoint >= CHECKPOINT_EVERY * 1000) {
+          lastCheckpoint = Date.now();
+          const value = chain;
+          sent = sent.then(async () => {
+            try {
+              await post(`/api/captures/${sessionId}/checkpoint`, {
+                chunks: count,
+                offset,
+                chain: await value,
+              });
+              if (alive.current) setCheckpoints((n) => n + 1);
+            } catch {
+              /* A missing checkpoint weakens the proof but never blocks the capture. */
+            }
+          });
+        }
       };
       active.onerror = () => {
         invalid = true;
@@ -182,13 +245,31 @@ export default function CapturePanel({
           return;
         }
         const type = mime.startsWith('video/mp4') ? 'video/mp4' : 'video/webm';
-        void finish(
-          new File(chunks, type === 'video/mp4' ? 'capture-video.mp4' : 'capture-video.webm', {
-            type,
-          }),
-          'video',
-          startedAt,
-          new Date().toISOString(),
+        const endedAt = new Date().toISOString();
+        // The last chunk arrives with stop: seal it, then wait for every checkpoint.
+        const value = chain;
+        sent = sent.then(async () => {
+          try {
+            await post(`/api/captures/${sessionId}/checkpoint`, {
+              chunks: chunks.length,
+              offset: length,
+              chain: await value,
+            });
+            if (alive.current) setCheckpoints((n) => n + 1);
+          } catch {
+            /* Already sent with the last chunk, or session closed. */
+          }
+        });
+        void sent.then(() =>
+          finish(
+            new File(chunks, type === 'video/mp4' ? 'capture-video.mp4' : 'capture-video.webm', {
+              type,
+            }),
+            'video',
+            startedAt,
+            endedAt,
+            chunks.map((chunk) => chunk.size),
+          ),
         );
       };
       active.start(250);
@@ -209,7 +290,12 @@ export default function CapturePanel({
         <li>Cadrez les faits avec le papier et le geste visibles, sans filtre.</li>
         <li>Photographiez ou filmez (60 s maximum) avant la fin du compte à rebours.</li>
         <li>
-          L’empreinte est engagée auprès du serveur, puis vous décrivez et déposez le fichier.
+          En vidéo, une empreinte partielle est engagée toutes les {CHECKPOINT_EVERY} secondes : le
+          serveur constate que la vidéo se construit en temps réel.
+        </li>
+        <li>
+          L’empreinte finale est engagée auprès du serveur, puis vous décrivez et déposez le
+          fichier.
         </li>
       </ol>
       <video ref={video} autoPlay playsInline muted onLoadedData={() => setReady(true)} />
@@ -246,7 +332,19 @@ export default function CapturePanel({
         Le navigateur encode le média. Une caméra virtuelle ou une scène mise en scène restent
         possibles ; ce protocole ne certifie pas « sans IA ».
       </p>
-      {recording && <p role="status">Enregistrement · {seconds} / 60 s</p>}
+      {device && (
+        <p className={`capture-device ${virtual ? 'virtual' : ''}`}>
+          {virtual
+            ? `Caméra logicielle détectée (« ${device.label} ») : le dossier exigera un examen. Utilisez la caméra physique de l’appareil.`
+            : `Caméra : ${device.label || 'nom non communiqué par le navigateur'}${device.width ? ` · ${device.width} × ${device.height}` : ''}`}
+        </p>
+      )}
+      {recording && (
+        <p role="status">
+          Enregistrement · {seconds} / 60 s · {checkpoints} engagement
+          {checkpoints > 1 ? 's' : ''} progressif{checkpoints > 1 ? 's' : ''}
+        </p>
+      )}
       {busy && <p role="status">Calcul SHA-256 et engagement serveur…</p>}
       {error && <p role="alert">{error}</p>}
       <div className="button-row">

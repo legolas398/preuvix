@@ -13,7 +13,12 @@ import type { Store } from './store';
 import { hash } from './integrity';
 import type { Manifest } from '../shared/types';
 import {
+  CHAIN_LABEL,
   captureCommitSchema,
+  checkpointSchema,
+  type Checkpoint,
+  type ProgressiveCommitment,
+  type Signed,
   type CaptureRecord,
   type CaptureSession,
   type Attestation,
@@ -41,6 +46,70 @@ export function newChallenge(): LivenessChallenge {
     code: code.join(''),
     gesture: GESTURES[randomInt(GESTURES.length)],
     maxSeconds: CHALLENGE_MAX_SECONDS,
+  };
+}
+
+const MAX_CHECKPOINTS = 400;
+export const chainStart = (nonce: string) => hash(`${CHAIN_LABEL}:${nonce}`);
+export const chainNext = (previous: string, chunk: Uint8Array) => hash(previous + hash(chunk));
+
+/**
+ * Recomputes the progressive chain from the deposited bytes: each checkpoint proves that the
+ * first N chunks existed at its server time, so the video was produced while it was recorded.
+ */
+export function verifyProgressive(
+  record: CaptureRecord,
+  bytes: Uint8Array,
+  durationSeconds = 0,
+): ProgressiveCommitment {
+  const checkpoints = record.checkpoints ?? [];
+  const fail = (detail: string): ProgressiveCommitment => ({
+    checkpoints: checkpoints.length,
+    verified: false,
+    spanSeconds: 0,
+    detail,
+  });
+  if (!checkpoints.length) return fail('Aucun point d’engagement reçu pendant l’enregistrement.');
+  const segments = record.segments ?? [];
+  if (segments.reduce((a, b) => a + b, 0) !== bytes.length)
+    return fail('Le découpage déclaré ne correspond pas à la taille du fichier déposé.');
+  let chain = chainStart(record.nonce);
+  let offset = 0;
+  let next = 0;
+  let previousAt = Date.parse(record.issuedAt);
+  for (let index = 0; index < segments.length && next < checkpoints.length; index++) {
+    chain = chainNext(chain, bytes.subarray(offset, offset + segments[index]));
+    offset += segments[index];
+    while (next < checkpoints.length && checkpoints[next].chunks === index + 1) {
+      const point = checkpoints[next];
+      const at = Date.parse(point.at);
+      if (point.offset !== offset || point.chain !== chain)
+        return fail(`Le point d’engagement n° ${next + 1} ne correspond pas au fichier déposé.`);
+      if (at < previousAt || at > Date.parse(record.committedAt))
+        return fail('Chronologie des points d’engagement incohérente.');
+      previousAt = at;
+      next++;
+    }
+  }
+  if (next !== checkpoints.length)
+    return fail('Des points d’engagement ne correspondent à aucun segment du fichier.');
+  const span = Math.round(
+    (Date.parse(checkpoints.at(-1)!.at) - Date.parse(checkpoints[0].at)) / 1000,
+  );
+  // The checkpoints must cover most of the recording: a prepared file pushed at once would not.
+  const required = Math.max(0, Math.min(durationSeconds * 0.6, durationSeconds - 6));
+  if (span < required)
+    return {
+      checkpoints: checkpoints.length,
+      verified: false,
+      spanSeconds: span,
+      detail: `Engagements concentrés sur ${span} s pour une vidéo de ${Math.round(durationSeconds)} s : rythme d’enregistrement non démontré.`,
+    };
+  return {
+    checkpoints: checkpoints.length,
+    verified: true,
+    spanSeconds: span,
+    detail: `${checkpoints.length} engagements progressifs vérifiés sur ${span} s : chaque segment de la vidéo existait à l’heure serveur indiquée, pendant l’enregistrement.`,
   };
 }
 
@@ -104,22 +173,45 @@ export function certification(store: Store, directory: string) {
     if (!row) throw new Error('Session de capture inconnue ou appartenant à une autre connexion.');
     return row;
   }
+  // Records a progressive checkpoint while a video is being recorded.
+  function progress(id: string, owner: string, input: unknown): Checkpoint {
+    const payload = checkpointSchema.parse(input);
+    const row = get(id, owner);
+    if (row.record) throw new Error('Capture déjà engagée.');
+    const session: CaptureSession & { checkpoints?: Checkpoint[] } = JSON.parse(row.session);
+    if (Date.now() > Date.parse(session.expiresAt))
+      throw new Error('Session expirée. Recommencez la capture.');
+    const checkpoints = session.checkpoints ?? [];
+    const last = checkpoints.at(-1);
+    if (checkpoints.length >= MAX_CHECKPOINTS) throw new Error('Trop de points d’engagement.');
+    if (last && (payload.chunks <= last.chunks || payload.offset <= last.offset))
+      throw new Error('Point d’engagement non croissant.');
+    const point = { ...payload, at: new Date().toISOString() };
+    store.db
+      .prepare('UPDATE capture_sessions SET session=? WHERE id=? AND record IS NULL')
+      .run(JSON.stringify({ ...session, checkpoints: [...checkpoints, point] }), id);
+    return point;
+  }
   function commit(id: string, owner: string, input: unknown): CaptureRecord {
     const payload = captureCommitSchema.parse(input);
     const row = get(id, owner);
     if (row.record) {
       const previous: CaptureRecord = JSON.parse(row.record);
       if (
-        ['sha256', 'kind', 'startedAt', 'endedAt'].some(
-          (key) => previous[key as keyof CaptureRecord] !== payload[key as keyof typeof payload],
+        ['sha256', 'kind', 'startedAt', 'endedAt', 'device', 'segments'].some(
+          (key) =>
+            JSON.stringify(previous[key as keyof CaptureRecord]) !==
+            JSON.stringify(payload[key as keyof typeof payload]),
         )
       )
         throw new Error('Cette session est déjà liée à un autre contenu.');
       return previous;
     }
-    const session: CaptureSession = JSON.parse(row.session);
+    const session: CaptureSession & { checkpoints?: Checkpoint[] } = JSON.parse(row.session);
     if (Date.now() > Date.parse(session.expiresAt))
       throw new Error('Session expirée. Recommencez la capture.');
+    if (payload.kind !== 'video' && (payload.segments || session.checkpoints?.length))
+      throw new Error('Engagement progressif réservé aux vidéos.');
     const committedAt = new Date();
     const record: CaptureRecord = {
       ...session,
@@ -154,6 +246,20 @@ export function certification(store: Store, directory: string) {
       scope: 'manifest_bytes',
     };
   }
+  // Generic signed statement: the exact payload bytes are what the signature covers.
+  function signStatement<T>(content: T): Signed<T> {
+    const payload = JSON.stringify(content);
+    return {
+      payload,
+      content,
+      signature: sign(null, Buffer.from(payload), privateKey).toString('base64'),
+      keyId,
+      publicKey,
+    };
+  }
+  function signBytes(bytes: Uint8Array) {
+    return sign(null, bytes, privateKey);
+  }
   // A review is signed separately: the deposit manifest stays immutable.
   function signReview(review: ChallengeReview): SignedReview {
     const payload = JSON.stringify(review);
@@ -165,5 +271,20 @@ export function certification(store: Store, directory: string) {
       publicKey,
     };
   }
-  return { issue, commit, resolve, attest, signReview, publicKey, keyId, retiredKeys };
+  // Custody entries are signed as they are appended by the store.
+  store.signer = signStatement;
+  store.trustedKeys = new Set([keyId, ...retiredKeys.map((key) => key.keyId)]);
+  return {
+    issue,
+    progress,
+    commit,
+    resolve,
+    attest,
+    signReview,
+    signStatement,
+    signBytes,
+    publicKey,
+    keyId,
+    retiredKeys,
+  };
 }

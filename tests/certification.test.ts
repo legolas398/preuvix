@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, rmSync, readFileSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, rmSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { randomUUID, verify } from 'node:crypto';
@@ -86,7 +86,7 @@ test('capture commitment is authenticated, immutable, session-bound and included
     assert.equal(proof.manifest.capture.committedAt, committed.committedAt);
     assert.equal(proof.status, 'pending');
     assert.equal(proof.receipt, null);
-    assert.equal(proof.manifest.certification.policy, 'preuvix-media-v2');
+    assert.equal(proof.manifest.certification.policy, 'preuvix-media-v3');
     assert.equal(proof.manifest.certification.status, 'capture_challenged');
     assert.match(proof.manifest.capture.challenge.code, /^[A-Z0-9]{4}$/);
     assert.ok(proof.manifest.capture.elapsedSeconds <= proof.manifest.capture.challenge.maxSeconds);
@@ -140,17 +140,19 @@ test('capture commitment is authenticated, immutable, session-bound and included
     assert.ok(files['manifest.sig']);
     assert.ok(files['signer-public.pem']);
     assert.ok(files['rapport.pdf']);
+    const extracted = path.join(directory, 'export');
+    mkdirSync(extracted);
     for (const [name, data] of Object.entries(files))
-      writeFileSync(path.join(directory, name), data);
-    const result = execFileSync(process.execPath, ['scripts/verify-export.mjs', directory], {
+      writeFileSync(path.join(extracted, name), data);
+    const result = execFileSync(process.execPath, ['scripts/verify-export.mjs', extracted], {
       encoding: 'utf8',
       windowsHide: true,
     });
     assert.match(result, /signature verified/);
     assert.match(result, /Challenge review verified: confirmed/);
-    writeFileSync(path.join(directory, 'original.jpeg'), 'tampered');
+    writeFileSync(path.join(extracted, 'original.jpeg'), 'tampered');
     assert.throws(() =>
-      execFileSync(process.execPath, ['scripts/verify-export.mjs', directory], {
+      execFileSync(process.execPath, ['scripts/verify-export.mjs', extracted], {
         stdio: 'pipe',
         windowsHide: true,
       }),

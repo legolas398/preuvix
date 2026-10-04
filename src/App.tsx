@@ -30,6 +30,12 @@ import {
   ExternalLink,
   Github,
   Info,
+  CircleAlert,
+  CircleCheck,
+  CircleDashed,
+  CircleMinus,
+  CircleX,
+  Paperclip,
 } from 'lucide-react';
 import type { AppConfig, Proof, PublicProof } from '../shared/types';
 import { certificationLabels } from '../shared/certification-policy';
@@ -46,6 +52,12 @@ import Welcome, { JusticeLoading } from './Welcome';
 import PartnerDirectory from './PartnerDirectory';
 import BillingPanel from './BillingPanel';
 import CapturePanel from './CapturePanel';
+import ProofInsights from './ProofInsights';
+import AnnexPanel, { ANNEX_ACCEPT, sealAnnex } from './AnnexPanel';
+import ChainOfCustody from './ChainOfCustody';
+import DocumentCheck from './DocumentCheck';
+import { AnimatePresence, motion } from 'motion/react';
+import { CountUp, HashReveal, Reveal, Stagger, StaggerItem, Timeline, Verdict } from './motion';
 
 const date = (value: string) =>
   new Intl.DateTimeFormat('fr-FR', {
@@ -134,6 +146,7 @@ export default function App() {
   }, []);
   const recipientToken = window.location.pathname.match(/^\/dossier\/([a-f0-9]{64})$/)?.[1];
   if (token) return <PublicVerification token={token} />;
+  if (window.location.pathname === '/verifier-document') return <DocumentVerificationPage />;
   if (recipientToken) return <RecipientPage token={recipientToken} />;
   if (error)
     return (
@@ -331,234 +344,262 @@ function Workspace({ config, onLogout }: { config: AppConfig; onLogout: () => Pr
         </header>
         <main className="main-content">
           {error && <Notice danger>{error}</Notice>}
-          {tab === 'proofs' ? (
-            <>
-              <div className="page-heading">
-                <div>
-                  <span className="eyebrow">VOTRE MÉMOIRE NUMÉRIQUE</span>
-                  <h1>
-                    Mes preuves<span className="heading-dot">.</span>
-                  </h1>
-                  <p>Conservez l’original. Documentez son intégrité. Gardez la main.</p>
-                </div>
-                <button className="button primary" onClick={() => setCreating(true)}>
-                  <Plus size={18} /> Créer une preuve
-                </button>
-              </div>
-              <section className="intro-card">
-                <div>
-                  <span className="intro-kicker">
-                    <span /> SIMPLE À CRÉER, POSSIBLE À VÉRIFIER
-                  </span>
-                  <h2>
-                    Une photo aujourd’hui.
-                    <br />
-                    Une trace pour demain.
-                  </h2>
-                  <p>
-                    Déposez une photo et retrouvez son original,
-                    <br className="desktop-break" /> son empreinte et son rapport au même endroit.
-                  </p>
-                  <button className="text-link" onClick={() => setTab('about')}>
-                    Comment vos fichiers sont protégés <ArrowRight size={16} />
-                  </button>
-                </div>
-                <div className="proof-illustration" aria-hidden="true">
-                  <div className="orbit orbit-one" />
-                  <div className="orbit orbit-two" />
-                  <div className="illustration-card">
-                    <div className="illustration-top">
-                      <Fingerprint size={20} />
-                      <span>PREUVIX</span>
-                      <span className="illustration-dot" />
+          <AnimatePresence mode="wait" initial={false}>
+            <motion.div
+              key={tab}
+              initial={{ opacity: 0, y: 14 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -8 }}
+              transition={{ duration: 0.28, ease: [0.22, 1, 0.36, 1] }}
+            >
+              {tab === 'proofs' ? (
+                <>
+                  <div className="page-heading">
+                    <div>
+                      <span className="eyebrow">VOTRE MÉMOIRE NUMÉRIQUE</span>
+                      <h1>
+                        Mes preuves<span className="heading-dot">.</span>
+                      </h1>
+                      <p>Conservez l’original. Documentez son intégrité. Gardez la main.</p>
                     </div>
-                    <div className="illustration-image">
-                      <div className="illustration-sun" />
-                      <div className="illustration-hill hill-one" />
-                      <div className="illustration-hill hill-two" />
-                    </div>
-                    <div className="illustration-line" />
-                    <div className="illustration-line short" />
-                    <div className="illustration-bottom">
-                      <LockKeyhole size={12} /> ORIGINAL CONSERVÉ
-                    </div>
-                  </div>
-                  <div className="floating-seal">
-                    <ShieldCheck size={28} />
-                  </div>
-                  <span className="illustration-spark spark-one">+</span>
-                  <span className="illustration-spark spark-two">+</span>
-                </div>
-              </section>
-              <section className="stats-grid">
-                <div className="stat">
-                  <span className="stat-icon">
-                    <FolderLock size={20} />
-                  </span>
-                  <div>
-                    <span>Preuves conservées</span>
-                    <strong>{proofs.length.toString().padStart(2, '0')}</strong>
-                  </div>
-                  <small>Originaux privés</small>
-                </div>
-                <div className="stat">
-                  <span className="stat-icon sage">
-                    <ShieldCheck size={20} />
-                  </span>
-                  <div>
-                    <span>Horodatages vérifiés</span>
-                    <strong>
-                      {proofs
-                        .filter((p) => p.status === 'timestamped')
-                        .length.toString()
-                        .padStart(2, '0')}
-                    </strong>
-                  </div>
-                  <small>Jetons RFC 3161</small>
-                </div>
-                <div className="stat">
-                  <span className="stat-icon sand">
-                    <Link2 size={20} />
-                  </span>
-                  <div>
-                    <span>Liens de vérification</span>
-                    <strong>
-                      {proofs
-                        .filter((p) => p.shareToken)
-                        .length.toString()
-                        .padStart(2, '0')}
-                    </strong>
-                  </div>
-                  <small>Partage à votre initiative</small>
-                </div>
-              </section>
-              {!config.timestampConfigured && (
-                <div className="provider-note">
-                  <Clock3 size={17} />
-                  <span>
-                    <strong>Horodatage indépendant non configuré.</strong> Vos dépôts sont conservés
-                    en attente. Aucun horodatage qualifié n’est revendiqué.
-                  </span>
-                  <button onClick={() => setTab('about')}>
-                    En savoir plus <ArrowRight size={14} />
-                  </button>
-                </div>
-              )}
-              <section className="records">
-                <div className="records-heading">
-                  <h2>
-                    Tous les dossiers <span>{proofs.length}</span>
-                  </h2>
-                  <div className="search">
-                    <Search size={16} />
-                    <input
-                      aria-label="Rechercher un dossier"
-                      placeholder="Rechercher un dossier…"
-                      value={query}
-                      onChange={(e) => setQuery(e.target.value)}
-                    />
-                  </div>
-                </div>
-                <div className="filter-tabs">
-                  {[
-                    ['all', 'Tous'],
-                    ['timestamped', 'Horodatés'],
-                    ['pending', 'En attente'],
-                  ].map(([value, label]) => (
-                    <button
-                      key={value}
-                      onClick={() => setFilter(value)}
-                      className={filter === value ? 'selected' : ''}
-                    >
-                      {label}
+                    <button className="button primary" onClick={() => setCreating(true)}>
+                      <Plus size={18} /> Créer une preuve
                     </button>
-                  ))}
-                </div>
-                {loading ? (
-                  <div className="empty-state">
-                    <Spinner />
-                    <p>Chargement de vos dossiers…</p>
                   </div>
-                ) : visible.length ? (
-                  <div className="proof-table">
-                    <div className="table-head">
-                      <span>DOSSIER</span>
-                      <span>DATE DE DÉPÔT</span>
-                      <span>STATUT</span>
-                      <span />
-                    </div>
-                    {visible.map((proof) => (
-                      <button
-                        className="proof-row"
-                        key={proof.id}
-                        onClick={() => setSelected(proof)}
-                      >
-                        <div className="file-cell">
-                          {proof.manifest.file.mime.startsWith('video/') ? (
-                            <span aria-label="Vidéo">▶</span>
-                          ) : (
-                            <img src={`/api/proofs/${proof.id}/original`} alt="" loading="lazy" />
-                          )}
-                          <div>
-                            <strong>{proof.manifest.title}</strong>
-                            <small>
-                              {shortId(proof.id)} <span>·</span> {size(proof.manifest.file.size)}
-                            </small>
-                          </div>
-                        </div>
-                        <span className="date-cell">{date(proof.manifest.receivedAt)}</span>
-                        <Status proof={proof} />
-                        <ChevronRight size={17} />
-                      </button>
-                    ))}
-                  </div>
-                ) : (
-                  <div className="empty-state">
-                    <div className="empty-icon">
-                      <ImagePlus size={27} />
-                      <span>
-                        <Plus size={11} />
+                  <section className="intro-card">
+                    <div>
+                      <span className="intro-kicker">
+                        <span /> SIMPLE À CRÉER, POSSIBLE À VÉRIFIER
                       </span>
-                    </div>
-                    <h3>
-                      {proofs.length
-                        ? 'Aucun dossier trouvé'
-                        : 'Votre première preuve commence ici'}
-                    </h3>
-                    <p>
-                      {proofs.length
-                        ? 'Essayez un autre titre ou un autre filtre.'
-                        : 'Une photo, un titre, et un original conservé dans votre espace privé.'}
-                    </p>
-                    {!proofs.length && (
-                      <button className="button secondary" onClick={() => setCreating(true)}>
-                        <Plus size={16} /> Déposer ma première photo
+                      <h2>
+                        Une photo aujourd’hui.
+                        <br />
+                        Une trace pour demain.
+                      </h2>
+                      <p>
+                        Déposez une photo et retrouvez son original,
+                        <br className="desktop-break" /> son empreinte et son rapport au même
+                        endroit.
+                      </p>
+                      <button className="text-link" onClick={() => setTab('about')}>
+                        Comment vos fichiers sont protégés <ArrowRight size={16} />
                       </button>
+                    </div>
+                    <div className="proof-illustration" aria-hidden="true">
+                      <div className="orbit orbit-one" />
+                      <div className="orbit orbit-two" />
+                      <div className="illustration-card">
+                        <div className="illustration-top">
+                          <Fingerprint size={20} />
+                          <span>PREUVIX</span>
+                          <span className="illustration-dot" />
+                        </div>
+                        <div className="illustration-image">
+                          <div className="illustration-sun" />
+                          <div className="illustration-hill hill-one" />
+                          <div className="illustration-hill hill-two" />
+                        </div>
+                        <div className="illustration-line" />
+                        <div className="illustration-line short" />
+                        <div className="illustration-bottom">
+                          <LockKeyhole size={12} /> ORIGINAL CONSERVÉ
+                        </div>
+                      </div>
+                      <div className="floating-seal">
+                        <ShieldCheck size={28} />
+                      </div>
+                      <span className="illustration-spark spark-one">+</span>
+                      <span className="illustration-spark spark-two">+</span>
+                    </div>
+                  </section>
+                  <Stagger className="stats-grid" inView={false}>
+                    <StaggerItem className="stat">
+                      <span className="stat-icon">
+                        <FolderLock size={20} />
+                      </span>
+                      <div>
+                        <span>Preuves conservées</span>
+                        <strong>
+                          <CountUp value={proofs.length} pad={2} />
+                        </strong>
+                      </div>
+                      <small>Originaux privés</small>
+                    </StaggerItem>
+                    <StaggerItem className="stat">
+                      <span className="stat-icon sage">
+                        <ShieldCheck size={20} />
+                      </span>
+                      <div>
+                        <span>Horodatages vérifiés</span>
+                        <strong>
+                          <CountUp
+                            value={proofs.filter((p) => p.status === 'timestamped').length}
+                            pad={2}
+                          />
+                        </strong>
+                      </div>
+                      <small>Jetons RFC 3161</small>
+                    </StaggerItem>
+                    <StaggerItem className="stat">
+                      <span className="stat-icon sand">
+                        <Link2 size={20} />
+                      </span>
+                      <div>
+                        <span>Liens de vérification</span>
+                        <strong>
+                          <CountUp value={proofs.filter((p) => p.shareToken).length} pad={2} />
+                        </strong>
+                      </div>
+                      <small>Partage à votre initiative</small>
+                    </StaggerItem>
+                  </Stagger>
+                  {!loading && proofs.length > 0 && (
+                    <ProofInsights proofs={proofs} usedBytes={used} limitMb={storageLimit} />
+                  )}
+                  {!config.timestampConfigured && (
+                    <div className="provider-note">
+                      <Clock3 size={17} />
+                      <span>
+                        <strong>Horodatage indépendant non configuré.</strong> Vos dépôts sont
+                        conservés en attente. Aucun horodatage qualifié n’est revendiqué.
+                      </span>
+                      <button onClick={() => setTab('about')}>
+                        En savoir plus <ArrowRight size={14} />
+                      </button>
+                    </div>
+                  )}
+                  <section className="records">
+                    <div className="records-heading">
+                      <h2>
+                        Tous les dossiers <span>{proofs.length}</span>
+                      </h2>
+                      <div className="search">
+                        <Search size={16} />
+                        <input
+                          aria-label="Rechercher un dossier"
+                          placeholder="Rechercher un dossier…"
+                          value={query}
+                          onChange={(e) => setQuery(e.target.value)}
+                        />
+                      </div>
+                    </div>
+                    <div className="filter-tabs">
+                      {[
+                        ['all', 'Tous'],
+                        ['timestamped', 'Horodatés'],
+                        ['pending', 'En attente'],
+                      ].map(([value, label]) => (
+                        <button
+                          key={value}
+                          onClick={() => setFilter(value)}
+                          className={filter === value ? 'selected' : ''}
+                        >
+                          {label}
+                          {filter === value && (
+                            <motion.span layoutId="filter-underline" className="filter-underline" />
+                          )}
+                        </button>
+                      ))}
+                    </div>
+                    {loading ? (
+                      <div className="empty-state">
+                        <Spinner />
+                        <p>Chargement de vos dossiers…</p>
+                      </div>
+                    ) : visible.length ? (
+                      <div className="proof-table">
+                        <div className="table-head">
+                          <span>DOSSIER</span>
+                          <span>DATE DE DÉPÔT</span>
+                          <span>STATUT</span>
+                          <span />
+                        </div>
+                        <AnimatePresence initial={true}>
+                          {visible.map((proof, index) => (
+                            <motion.button
+                              layout="position"
+                              className="proof-row"
+                              key={proof.id}
+                              onClick={() => setSelected(proof)}
+                              initial={{ opacity: 0, y: 10 }}
+                              animate={{ opacity: 1, y: 0 }}
+                              exit={{ opacity: 0, transition: { duration: 0.12 } }}
+                              transition={{ duration: 0.35, delay: Math.min(index, 10) * 0.035 }}
+                            >
+                              <div className="file-cell">
+                                {proof.manifest.file.mime.startsWith('video/') ? (
+                                  <span aria-label="Vidéo">▶</span>
+                                ) : (
+                                  <img
+                                    src={`/api/proofs/${proof.id}/original`}
+                                    alt=""
+                                    loading="lazy"
+                                  />
+                                )}
+                                <div>
+                                  <strong>{proof.manifest.title}</strong>
+                                  <small>
+                                    {shortId(proof.id)} <span>·</span>{' '}
+                                    {size(proof.manifest.file.size)}
+                                  </small>
+                                </div>
+                              </div>
+                              <span className="date-cell">{date(proof.manifest.receivedAt)}</span>
+                              <Status proof={proof} />
+                              <ChevronRight size={17} />
+                            </motion.button>
+                          ))}
+                        </AnimatePresence>
+                      </div>
+                    ) : (
+                      <div className="empty-state">
+                        <div className="empty-icon">
+                          <ImagePlus size={27} />
+                          <span>
+                            <Plus size={11} />
+                          </span>
+                        </div>
+                        <h3>
+                          {proofs.length
+                            ? 'Aucun dossier trouvé'
+                            : 'Votre première preuve commence ici'}
+                        </h3>
+                        <p>
+                          {proofs.length
+                            ? 'Essayez un autre titre ou un autre filtre.'
+                            : 'Une photo, un titre, et un original conservé dans votre espace privé.'}
+                        </p>
+                        {!proofs.length && (
+                          <button className="button secondary" onClick={() => setCreating(true)}>
+                            <Plus size={16} /> Déposer ma première photo
+                          </button>
+                        )}
+                      </div>
                     )}
+                  </section>
+                  <div className="bottom-assurance">
+                    <span>
+                      <LockKeyhole size={14} /> Privé par défaut
+                    </span>
+                    <span>
+                      <Fingerprint size={14} /> Intégrité vérifiable
+                    </span>
+                    <span>
+                      <ArrowDownToLine size={14} /> Export à tout moment
+                    </span>
                   </div>
-                )}
-              </section>
-              <div className="bottom-assurance">
-                <span>
-                  <LockKeyhole size={14} /> Privé par défaut
-                </span>
-                <span>
-                  <Fingerprint size={14} /> Intégrité vérifiable
-                </span>
-                <span>
-                  <ArrowDownToLine size={14} /> Export à tout moment
-                </span>
-              </div>
-            </>
-          ) : tab === 'billing' ? (
-            <section className="billing-workspace">
-              <BillingPanel privateWorkspace onQuotaChange={setStorageLimit} />
-            </section>
-          ) : tab === 'verify' ? (
-            <VerificationEntry />
-          ) : (
-            <About config={config} />
-          )}
+                </>
+              ) : tab === 'billing' ? (
+                <section className="billing-workspace">
+                  <BillingPanel privateWorkspace onQuotaChange={setStorageLimit} />
+                </section>
+              ) : tab === 'verify' ? (
+                <VerificationEntry />
+              ) : (
+                <About config={config} />
+              )}
+            </motion.div>
+          </AnimatePresence>
         </main>
         <footer className="app-footer">
           <span>
@@ -597,6 +638,12 @@ function Workspace({ config, onLogout }: { config: AppConfig; onLogout: () => Pr
   );
 }
 
+const STEPS = ['Capturer', 'Sceller', 'Décrire', 'Annexes', 'Certifier'] as const;
+const DECLARATION =
+  'Je décris les faits de bonne foi, signale les modifications connues et conserve les éléments utiles au débat contradictoire.';
+type QueuedAnnex = { id: string; file: File; sha: string; note: string };
+type ProgressItem = { label: string; state: 'done' | 'wait' | 'failed' | 'running' };
+
 function CreateProof({
   config,
   close,
@@ -606,6 +653,7 @@ function CreateProof({
   close: () => void;
   onCreated: (proof: Proof) => Promise<void>;
 }) {
+  const [step, setStep] = useState(0);
   const [file, setFile] = useState<File | null>(null);
   const [preview, setPreview] = useState('');
   const [fileHash, setFileHash] = useState('');
@@ -618,9 +666,13 @@ function CreateProof({
   const [author, setAuthor] = useState('');
   const [context, setContext] = useState('');
   const [declared, setDeclared] = useState(false);
+  const [annexes, setAnnexes] = useState<QueuedAnnex[]>([]);
+  const [progress, setProgress] = useState<ProgressItem[]>([]);
+  const [created, setCreated] = useState<Proof | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const key = useRef(crypto.randomUUID());
+  const annexInput = useRef<HTMLInputElement>(null);
   useEffect(() => {
     let cancelled = false;
     setFileHash('');
@@ -640,7 +692,9 @@ function CreateProof({
       return sha256File(file);
     })()
       .then((value) => {
-        if (!cancelled) setFileHash(value);
+        if (cancelled) return;
+        setFileHash(value);
+        setStep(1);
       })
       .catch((e) => {
         if (!cancelled) setError((e as Error).message);
@@ -677,11 +731,53 @@ function CreateProof({
     setCamera(false);
     if (!title) setTitle(selected.name.replace(/\.[^.]+$/, '').slice(0, 120));
   };
+  const queueAnnexes = async (files: FileList | null) => {
+    setError('');
+    for (const selected of Array.from(files ?? [])) {
+      if (selected.size > 10 * 1024 * 1024) {
+        setError(`« ${selected.name} » dépasse 10 Mo.`);
+        continue;
+      }
+      try {
+        const sha = await sha256File(selected);
+        setAnnexes((list) =>
+          list.some((item) => item.sha === sha)
+            ? list
+            : [...list, { id: crypto.randomUUID(), file: selected, sha, note: '' }],
+        );
+      } catch (e) {
+        setError((e as Error).message);
+      }
+    }
+  };
+  const declarationValid = !declared || (author.trim().length >= 2 && context.trim().length >= 5);
+  const reachable = [
+    true,
+    Boolean(fileHash),
+    Boolean(fileHash),
+    Boolean(fileHash && title.trim() && declarationValid),
+    Boolean(fileHash && title.trim() && declarationValid),
+  ];
+  const isVideo = file?.type.startsWith('video/');
   const submit = async (event: FormEvent) => {
     event.preventDefault();
     if (!file || !fileHash || hashing) return;
     setBusy(true);
     setError('');
+    const items: ProgressItem[] = [
+      { label: 'Envoi et recalcul de l’empreinte par le serveur', state: 'running' },
+      { label: 'Manifeste figé et signé', state: 'wait' },
+      { label: 'Horodatage indépendant', state: 'wait' },
+      ...annexes.map((annex, index) => ({
+        label: `Pièce A${index + 1} scellée · ${annex.file.name}`,
+        state: 'wait' as const,
+      })),
+    ];
+    const update = (index: number, state: ProgressItem['state'], label?: string) => {
+      items[index] = { label: label ?? items[index].label, state };
+      setProgress([...items]);
+    };
+    setProgress([...items]);
     const body = new FormData();
     body.append('file', file);
     body.append('title', title);
@@ -691,23 +787,62 @@ function CreateProof({
     body.append('clientSha256', fileHash);
     if (captureId) body.append('captureId', captureId);
     if (declared)
-      body.append(
-        'declaration',
-        JSON.stringify({
-          author,
-          context,
-          statement:
-            'Je décris les faits de bonne foi, signale les modifications connues et conserve les éléments utiles au débat contradictoire.',
-        }),
-      );
+      body.append('declaration', JSON.stringify({ author, context, statement: DECLARATION }));
+    let proof = created;
     try {
-      await onCreated(await api<Proof>('/api/proofs', { method: 'POST', body }));
+      if (!proof) {
+        proof = await api<Proof>('/api/proofs', { method: 'POST', body });
+        setCreated(proof);
+      }
+      update(0, 'done');
+      update(1, proof.attestation ? 'done' : 'failed');
+      update(
+        2,
+        proof.receipt ? 'done' : 'wait',
+        proof.receipt
+          ? `Horodatage RFC 3161 obtenu · ${proof.receipt.provider}`
+          : 'Horodatage indépendant en attente (prestataire non configuré ou indisponible)',
+      );
+      const sealed = new Set((proof.annexes ?? []).map((annex) => annex.sha256));
+      for (const [index, annex] of annexes.entries()) {
+        if (sealed.has(annex.sha)) {
+          update(3 + index, 'done');
+          continue;
+        }
+        update(3 + index, 'running');
+        try {
+          proof = await sealAnnex(proof.id, annex.file, annex.note, annex.sha);
+          update(3 + index, 'done');
+        } catch (e) {
+          update(3 + index, 'failed', `${items[3 + index].label} — ${(e as Error).message}`);
+          throw new Error(
+            'Le dossier est créé, mais une pièce n’a pas pu être scellée. Réessayez ou ajoutez-la depuis le dossier.',
+          );
+        }
+      }
+      await onCreated(proof);
     } catch (e) {
+      if (!proof) update(0, 'failed');
       setError((e as Error).message);
     } finally {
       setBusy(false);
     }
   };
+  const goto = (target: number) => {
+    if (!busy && !created && reachable[target]) setStep(target);
+  };
+  // Distinct keys: React must not reuse this element as the submit button mid-click.
+  const next = (
+    <button
+      key="next"
+      type="button"
+      className="button primary"
+      disabled={!reachable[step + 1]}
+      onClick={() => goto(step + 1)}
+    >
+      Continuer <ArrowRight size={16} />
+    </button>
+  );
   return (
     <Modal
       title="Créer une preuve"
@@ -716,9 +851,27 @@ function CreateProof({
       }}
     >
       <p className="modal-subtitle">
-        Capturez ou importez une photo ou une vidéo, documentez les faits et obtenez votre
-        attestation technique PDF.
+        Cinq étapes, de la prise de vue au dossier certifié. Chaque étape ajoute un maillon
+        vérifiable à la chaîne de preuve.
       </p>
+      <ol className="stepper" aria-label="Étapes de certification">
+        {STEPS.map((label, index) => (
+          <li
+            key={label}
+            className={index === step ? 'current' : index < step ? 'done' : ''}
+            aria-current={index === step ? 'step' : undefined}
+          >
+            <button
+              type="button"
+              disabled={!reachable[index] || busy || Boolean(created)}
+              onClick={() => goto(index)}
+            >
+              <span className="step-dot">{index < step ? <Check size={14} /> : index + 1}</span>
+              <span>{label}</span>
+            </button>
+          </li>
+        ))}
+      </ol>
       {camera ? (
         <CapturePanel
           close={() => setCamera(false)}
@@ -727,194 +880,445 @@ function CreateProof({
       ) : (
         <form onSubmit={submit}>
           <fieldset disabled={busy}>
-            <div
-              className="upload-zone"
-              onDragOver={(e) => e.preventDefault()}
-              onDrop={(e) => {
-                e.preventDefault();
-                if (!busy) choose(e.dataTransfer.files[0], 'upload');
-              }}
-            >
-              {preview ? (
-                <>
-                  {file?.type.startsWith('video/') ? (
-                    <video className="upload-preview" src={preview} controls playsInline />
-                  ) : (
-                    <img
-                      className="upload-preview"
-                      src={preview}
-                      alt="Aperçu du fichier sélectionné"
-                    />
-                  )}
-                  <span>
-                    {file?.name} · {size(file?.size || 0)}
-                  </span>
-                </>
-              ) : (
-                <>
-                  <div className="round-icon">
-                    <Upload size={25} />
-                  </div>
-                  <h3>Déposez votre photo ou vidéo ici</h3>
-                  <p>
-                    Photo : JPEG, PNG, WebP · 10 Mo. Vidéo : MP4, WebM · 50 Mo, 120 secondes
-                    maximum.
-                  </p>
-                </>
-              )}
-              <div className="button-row">
-                <label className="button secondary file-button">
-                  <ImagePlus size={16} /> {file ? 'Changer la photo' : 'Choisir un fichier'}
-                  <input
-                    type="file"
-                    accept="image/jpeg,image/png,image/webp,video/mp4,video/webm"
-                    onChange={(e) => choose(e.target.files?.[0], 'upload')}
-                    aria-label="Choisir une photo"
-                  />
-                </label>
-                <button type="button" className="button secondary" onClick={() => setCamera(true)}>
-                  <Camera size={16} /> Caméra
-                </button>
-              </div>
-            </div>
-            <p className="phone-format-help">
-              Sur iPhone, choisissez une copie JPEG si la photo est au format HEIC. Aucun fichier
-              n’est converti automatiquement.
-            </p>
-            {hashing && (
-              <div className="hash-progress" role="status">
-                <Spinner /> Calcul de l’empreinte sur votre appareil…
-              </div>
-            )}
-            {fileHash && (
-              <div className="hash-box" aria-label="Empreinte avant dépôt">
-                <span>
-                  <Fingerprint size={16} /> SHA-256 CALCULÉ AVANT L’ENVOI
-                </span>
-                <code>{fileHash}</code>
-                <p>
-                  Le serveur recalculera cette empreinte. Le dépôt sera refusé si les résultats
-                  diffèrent. Le fichier n’a pas encore été envoyé.
-                </p>
-              </div>
-            )}
-            <label htmlFor="proof-title">
-              Titre du dossier <span>*</span>
-            </label>
-            <input
-              id="proof-title"
-              required
-              maxLength={120}
-              value={title}
-              onChange={(e) => {
-                key.current = crypto.randomUUID();
-                setTitle(e.target.value);
-              }}
-              placeholder="Ex. État du mur avant travaux"
-            />
-            <label htmlFor="proof-description">
-              Contexte <small>facultatif</small>
-            </label>
-            <textarea
-              id="proof-description"
-              rows={3}
-              maxLength={1500}
-              value={description}
-              onChange={(e) => {
-                key.current = crypto.randomUUID();
-                setDescription(e.target.value);
-              }}
-              placeholder="Décrivez ce que vous souhaitez documenter…"
-            />
-            <div className="privacy-hint">
-              <LockKeyhole size={15} />
-              <span>
-                Privé par défaut. Aucune géolocalisation demandée. L’original peut toutefois
-                contenir ses propres métadonnées.
-              </span>
-            </div>
-            <div className="capture-declaration">
-              <h3>Documenter les faits</h3>
-              {captureId && (
-                <p>
-                  Empreinte engagée auprès du serveur. Déposez ce média dans les 24 heures.
-                  L’identité de l’auteur et la réalité de la scène ne sont pas vérifiées.
-                </p>
-              )}
-              <label htmlFor="declared-author">Auteur déclaré (facultatif)</label>
-              <input
-                id="declared-author"
-                maxLength={120}
-                value={author}
-                onChange={(e) => {
-                  setAuthor(e.target.value);
-                  key.current = crypto.randomUUID();
-                }}
-              />
-              <label htmlFor="declared-context">
-                Lieu, circonstances et modifications connues (facultatif)
-              </label>
-              <textarea
-                id="declared-context"
-                maxLength={1200}
-                rows={3}
-                value={context}
-                onChange={(e) => {
-                  setContext(e.target.value);
-                  key.current = crypto.randomUUID();
-                }}
-                placeholder="Distinguez ce que vous avez observé de vos interprétations. Signalez tout montage, filtre ou usage d’IA connu."
-              />
-              <label className="capture-check">
-                <input
-                  type="checkbox"
-                  checked={declared}
-                  onChange={(e) => {
-                    setDeclared(e.target.checked);
-                    key.current = crypto.randomUUID();
-                  }}
-                />{' '}
-                Je décris les faits de bonne foi, signale les modifications connues et conserve les
-                éléments utiles au débat contradictoire.
-              </label>
-              <p>
-                Ces déclarations sont ajoutées au manifeste signé uniquement si vous cochez la case
-                et complétez les deux champs. Aucun score « sans IA » ni garantie de recevabilité
-                n’est délivré.
-              </p>
-            </div>
-            {!config.timestampConfigured && (
-              <Notice>
-                Le fichier sera conservé <strong>en attente d’horodatage</strong>. Le prestataire
-                indépendant n’est pas encore configuré.
-              </Notice>
-            )}
-            {error && <Notice danger>{error}</Notice>}
-            <div className="modal-actions">
-              <button type="button" className="button secondary" onClick={close}>
-                Annuler
-              </button>
-              <button
-                className="button primary"
-                disabled={
-                  !file ||
-                  !fileHash ||
-                  hashing ||
-                  !title.trim() ||
-                  busy ||
-                  (declared && (author.trim().length < 2 || context.trim().length < 5))
-                }
+            <AnimatePresence mode="wait" initial={false}>
+              <motion.div
+                key={step}
+                className="step-panel"
+                initial={{ opacity: 0, x: 16 }}
+                animate={{ opacity: 1, x: 0 }}
+                exit={{ opacity: 0, x: -12 }}
+                transition={{ duration: 0.2 }}
               >
-                {busy ? (
+                {step === 0 && (
                   <>
-                    <Spinner /> Dépôt et vérification…
-                  </>
-                ) : (
-                  <>
-                    <Plus size={17} /> Conserver ma preuve
+                    <h3>1. Capturer le média</h3>
+                    <p className="step-lead">
+                      La caméra PREUVIX donne la preuve la plus forte : session serveur, défi en
+                      direct et, en vidéo, engagement progressif. Un import ne documente pas
+                      l’origine du fichier.
+                    </p>
+                    <div
+                      className="upload-zone"
+                      onDragOver={(e) => e.preventDefault()}
+                      onDrop={(e) => {
+                        e.preventDefault();
+                        if (!busy) choose(e.dataTransfer.files[0], 'upload');
+                      }}
+                    >
+                      {preview ? (
+                        <>
+                          {isVideo ? (
+                            <video className="upload-preview" src={preview} controls playsInline />
+                          ) : (
+                            <img
+                              className="upload-preview"
+                              src={preview}
+                              alt="Aperçu du fichier sélectionné"
+                            />
+                          )}
+                          <span>
+                            {file?.name} · {size(file?.size || 0)}
+                          </span>
+                        </>
+                      ) : (
+                        <>
+                          <div className="round-icon">
+                            <Upload size={25} />
+                          </div>
+                          <h3>Déposez votre photo ou vidéo ici</h3>
+                          <p>
+                            Photo : JPEG, PNG, WebP · 10 Mo. Vidéo : MP4, WebM · 50 Mo, 120 secondes
+                            maximum.
+                          </p>
+                        </>
+                      )}
+                      <div className="button-row">
+                        <button
+                          type="button"
+                          className="button primary"
+                          onClick={() => setCamera(true)}
+                        >
+                          <Camera size={16} /> Caméra
+                        </button>
+                        <label className="button secondary file-button">
+                          <ImagePlus size={16} />{' '}
+                          {file ? 'Changer le fichier' : 'Importer un fichier'}
+                          <input
+                            type="file"
+                            accept="image/jpeg,image/png,image/webp,video/mp4,video/webm"
+                            onChange={(e) => choose(e.target.files?.[0], 'upload')}
+                            aria-label="Choisir une photo"
+                          />
+                        </label>
+                      </div>
+                    </div>
+                    <p className="phone-format-help">
+                      Sur iPhone, choisissez une copie JPEG si la photo est au format HEIC. Aucun
+                      fichier n’est converti automatiquement.
+                    </p>
+                    {hashing && (
+                      <div className="hash-progress" role="status">
+                        <Spinner /> Calcul de l’empreinte sur votre appareil…
+                      </div>
+                    )}
                   </>
                 )}
-              </button>
+                {step === 1 && (
+                  <>
+                    <h3>2. Sceller l’empreinte</h3>
+                    <p className="step-lead">
+                      L’empreinte SHA-256 identifie chaque octet du média. Toute retouche, même
+                      invisible, la change entièrement.
+                    </p>
+                    <div className="hash-box" aria-label="Empreinte avant dépôt">
+                      <span>
+                        <Fingerprint size={16} /> SHA-256 CALCULÉ AVANT L’ENVOI
+                      </span>
+                      <HashReveal value={fileHash} />
+                    </div>
+                    <div className="seal-grid">
+                      <div className="seal-item ok">
+                        <CircleCheck size={18} />
+                        <div>
+                          <strong>Empreinte calculée sur votre appareil</strong>
+                          <span>
+                            Le serveur la recalculera et refusera le dépôt si elle diffère. Le
+                            fichier n’a pas encore été envoyé.
+                          </span>
+                        </div>
+                      </div>
+                      {captureId ? (
+                        <div className="seal-item ok">
+                          <CircleCheck size={18} />
+                          <div>
+                            <strong>
+                              Empreinte engagée auprès du serveur. Déposez ce média dans les 24
+                              heures.
+                            </strong>
+                            <span>
+                              Session de capture, défi en direct et caméra utilisée sont figés
+                              {isVideo
+                                ? ', ainsi que les engagements progressifs envoyés pendant l’enregistrement'
+                                : ''}
+                              .
+                            </span>
+                          </div>
+                        </div>
+                      ) : (
+                        <div className="seal-item none">
+                          <CircleMinus size={18} />
+                          <div>
+                            <strong>Import : origine non documentée</strong>
+                            <span>
+                              Aucune session de capture. Pour une preuve plus forte, revenez à
+                              l’étape 1 et utilisez la caméra.
+                            </span>
+                          </div>
+                        </div>
+                      )}
+                      <div className="seal-item none">
+                        <CircleMinus size={18} />
+                        <div>
+                          <strong>Non établi par ce protocole</strong>
+                          <span>
+                            L’identité de l’auteur et la réalité de la scène ne sont pas vérifiées ;
+                            aucun score « sans IA » n’est délivré.
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+                  </>
+                )}
+                {step === 2 && (
+                  <>
+                    <h3>3. Décrire les faits</h3>
+                    <p className="step-lead">
+                      Le titre, le contexte et votre déclaration seront figés dans le manifeste
+                      signé : ils ne pourront plus être modifiés.
+                    </p>
+                    <label htmlFor="proof-title">
+                      Titre du dossier <span>*</span>
+                    </label>
+                    <input
+                      id="proof-title"
+                      required
+                      maxLength={120}
+                      value={title}
+                      onChange={(e) => {
+                        key.current = crypto.randomUUID();
+                        setTitle(e.target.value);
+                      }}
+                      placeholder="Ex. État du mur avant travaux"
+                    />
+                    <label htmlFor="proof-description">
+                      Contexte <small>facultatif</small>
+                    </label>
+                    <textarea
+                      id="proof-description"
+                      rows={3}
+                      maxLength={1500}
+                      value={description}
+                      onChange={(e) => {
+                        key.current = crypto.randomUUID();
+                        setDescription(e.target.value);
+                      }}
+                      placeholder="Décrivez ce que vous souhaitez documenter…"
+                    />
+                    <div className="privacy-hint">
+                      <LockKeyhole size={15} />
+                      <span>
+                        Privé par défaut. Aucune géolocalisation demandée. L’original peut toutefois
+                        contenir ses propres métadonnées.
+                      </span>
+                    </div>
+                    <div className="capture-declaration">
+                      <h3>Déclaration de bonne foi</h3>
+                      <label htmlFor="declared-author">Auteur déclaré (facultatif)</label>
+                      <input
+                        id="declared-author"
+                        maxLength={120}
+                        value={author}
+                        onChange={(e) => {
+                          setAuthor(e.target.value);
+                          key.current = crypto.randomUUID();
+                        }}
+                      />
+                      <label htmlFor="declared-context">
+                        Lieu, circonstances et modifications connues (facultatif)
+                      </label>
+                      <textarea
+                        id="declared-context"
+                        maxLength={1200}
+                        rows={3}
+                        value={context}
+                        onChange={(e) => {
+                          setContext(e.target.value);
+                          key.current = crypto.randomUUID();
+                        }}
+                        placeholder="Distinguez ce que vous avez observé de vos interprétations. Signalez tout montage, filtre ou usage d’IA connu."
+                      />
+                      <label className="capture-check">
+                        <input
+                          type="checkbox"
+                          checked={declared}
+                          onChange={(e) => {
+                            setDeclared(e.target.checked);
+                            key.current = crypto.randomUUID();
+                          }}
+                        />{' '}
+                        {DECLARATION}
+                      </label>
+                      <p>
+                        Ajoutée au manifeste signé uniquement si vous cochez la case et complétez
+                        les deux champs.
+                      </p>
+                    </div>
+                  </>
+                )}
+                {step === 3 && (
+                  <>
+                    <h3>4. Joindre les pièces annexes</h3>
+                    <p className="step-lead">
+                      Facultatif. Facture, contrat, courrier, échange de courriels… Chaque pièce est
+                      hachée ici, puis scellée et signée par le serveur, liée à ce dossier. Elle ne
+                      pourra être ni remplacée ni retirée.
+                    </p>
+                    {annexes.length > 0 && (
+                      <ul className="queued-annexes">
+                        {annexes.map((annex, index) => (
+                          <li key={annex.id}>
+                            <span className="annex-seq">A{index + 1}</span>
+                            <div>
+                              <strong>{annex.file.name}</strong>
+                              <small>
+                                {Math.max(1, Math.ceil(annex.file.size / 1024))} Ko · SHA-256{' '}
+                                {annex.sha.slice(0, 20)}…
+                              </small>
+                              <input
+                                aria-label={`Note pour ${annex.file.name}`}
+                                maxLength={500}
+                                value={annex.note}
+                                placeholder="Note facultative"
+                                onChange={(e) =>
+                                  setAnnexes((list) =>
+                                    list.map((item) =>
+                                      item.id === annex.id
+                                        ? { ...item, note: e.target.value }
+                                        : item,
+                                    ),
+                                  )
+                                }
+                              />
+                            </div>
+                            <button
+                              type="button"
+                              className="icon-button"
+                              aria-label={`Retirer ${annex.file.name}`}
+                              onClick={() =>
+                                setAnnexes((list) => list.filter((item) => item.id !== annex.id))
+                              }
+                            >
+                              <X size={16} />
+                            </button>
+                          </li>
+                        ))}
+                      </ul>
+                    )}
+                    <button
+                      type="button"
+                      className="button secondary"
+                      onClick={() => annexInput.current?.click()}
+                    >
+                      <Paperclip size={16} /> Ajouter des pièces
+                    </button>
+                    <input
+                      ref={annexInput}
+                      type="file"
+                      hidden
+                      multiple
+                      accept={ANNEX_ACCEPT}
+                      aria-label="Ajouter des pièces annexes"
+                      onChange={(e) => {
+                        void queueAnnexes(e.target.files);
+                        e.target.value = '';
+                      }}
+                    />
+                    <p className="phone-format-help">
+                      PDF, JPEG, PNG, WebP ou texte (TXT, EML, CSV) · 10 Mo par pièce. Vous pourrez
+                      aussi en ajouter plus tard depuis le dossier.
+                    </p>
+                  </>
+                )}
+                {step === 4 && (
+                  <>
+                    <h3>5. Certifier</h3>
+                    <p className="step-lead">
+                      Le serveur recalcule l’empreinte, décode le média, fige le manifeste, le
+                      signe, demande l’horodatage, puis scelle les pièces. Chaque opération est
+                      inscrite dans le journal signé du dossier.
+                    </p>
+                    {!progress.length ? (
+                      <div className="seal-grid">
+                        <div className="seal-item ok">
+                          <CircleCheck size={18} />
+                          <div>
+                            <strong>{title}</strong>
+                            <span>
+                              {isVideo ? 'Vidéo' : 'Photo'} {captureId ? 'capturée' : 'importée'} ·{' '}
+                              {size(file?.size || 0)} · {fileHash.slice(0, 16)}…
+                            </span>
+                          </div>
+                        </div>
+                        <div className={`seal-item ${declared ? 'ok' : 'none'}`}>
+                          {declared ? <CircleCheck size={18} /> : <CircleMinus size={18} />}
+                          <div>
+                            <strong>
+                              {declared ? 'Déclaration de bonne foi signée' : 'Sans déclaration'}
+                            </strong>
+                            <span>{declared ? `Auteur déclaré : ${author}` : 'Facultative.'}</span>
+                          </div>
+                        </div>
+                        <div className={`seal-item ${annexes.length ? 'ok' : 'none'}`}>
+                          {annexes.length ? <CircleCheck size={18} /> : <CircleMinus size={18} />}
+                          <div>
+                            <strong>
+                              {annexes.length
+                                ? `${annexes.length} pièce${annexes.length > 1 ? 's' : ''} annexe${annexes.length > 1 ? 's' : ''} à sceller`
+                                : 'Aucune pièce annexe'}
+                            </strong>
+                            <span>
+                              {annexes.map((annex) => annex.file.name).join(' · ') || '—'}
+                            </span>
+                          </div>
+                        </div>
+                        <div className={`seal-item ${config.timestampConfigured ? 'ok' : 'warn'}`}>
+                          {config.timestampConfigured ? (
+                            <CircleCheck size={18} />
+                          ) : (
+                            <CircleAlert size={18} />
+                          )}
+                          <div>
+                            <strong>
+                              {config.timestampConfigured
+                                ? `Horodatage par ${config.providerName}`
+                                : 'Horodatage indépendant en attente'}
+                            </strong>
+                            <span>
+                              {config.timestampConfigured
+                                ? 'Jeton RFC 3161 demandé sur le manifeste signé.'
+                                : 'Le prestataire n’est pas configuré : la date reposera sur l’horloge de cette installation.'}
+                            </span>
+                          </div>
+                        </div>
+                      </div>
+                    ) : (
+                      <ol className="certify-progress" aria-live="polite">
+                        {progress.map((item) => (
+                          <li key={item.label} className={item.state}>
+                            {item.state === 'done' ? (
+                              <CircleCheck size={18} />
+                            ) : item.state === 'running' ? (
+                              <LoaderCircle className="spin" size={18} />
+                            ) : item.state === 'failed' ? (
+                              <CircleX size={18} />
+                            ) : (
+                              <CircleDashed size={18} />
+                            )}
+                            {item.label}
+                          </li>
+                        ))}
+                      </ol>
+                    )}
+                  </>
+                )}
+              </motion.div>
+            </AnimatePresence>
+            {error && <Notice danger>{error}</Notice>}
+            <div className="modal-actions">
+              {step === 0 ? (
+                <button type="button" className="button secondary" onClick={close}>
+                  Annuler
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  className="button secondary"
+                  disabled={Boolean(created)}
+                  onClick={() => goto(step - 1)}
+                >
+                  <ArrowLeft size={16} /> Retour
+                </button>
+              )}
+              {step < 4 ? (
+                next
+              ) : created && error ? (
+                <button
+                  key="open"
+                  type="button"
+                  className="button primary"
+                  onClick={() => onCreated(created)}
+                >
+                  Ouvrir le dossier <ArrowRight size={16} />
+                </button>
+              ) : (
+                <button
+                  key="submit"
+                  className="button primary"
+                  disabled={
+                    !file || !fileHash || hashing || !title.trim() || busy || !declarationValid
+                  }
+                >
+                  {busy ? (
+                    <>
+                      <Spinner /> Certification en cours…
+                    </>
+                  ) : (
+                    <>
+                      <ShieldCheck size={17} /> {created ? 'Réessayer' : 'Conserver ma preuve'}
+                    </>
+                  )}
+                </button>
+              )}
             </div>
           </fieldset>
         </form>
@@ -941,6 +1345,11 @@ function ProofDetail({
   const [deleting, setDeleting] = useState(false);
   const [confirmation, setConfirmation] = useState('');
   const [copied, setCopied] = useState(false);
+  // The list holds summaries; the chain is re-verified by the server when the dossier opens.
+  const reload = () => api<Proof>(`/api/proofs/${proof.id}`).then(onChange);
+  useEffect(() => {
+    reload().catch((e) => setError((e as Error).message));
+  }, [proof.id]);
   const act = async (action: () => Promise<void>) => {
     setBusy(true);
     setError('');
@@ -1008,6 +1417,18 @@ function ProofDetail({
         </span>
         <code>{proof.manifest.file.sha256}</code>
       </div>
+      {proof.chain ? (
+        <ChainOfCustody chain={proof.chain} custody={proof.custody} />
+      ) : (
+        <div className="hash-progress" role="status">
+          <Spinner /> Vérification de la chaîne de preuve…
+        </div>
+      )}
+      <AnnexPanel
+        proof={proof}
+        downloadBase={`/api/proofs/${proof.id}/annexes`}
+        onChange={onChange}
+      />
       <details className="private-verification">
         <summary>Comparer une copie avec ce dossier</summary>
         <LocalFileCheck expectedHash={proof.manifest.file.sha256} />
@@ -1216,38 +1637,56 @@ function ProofDetail({
           </button>
         )}
       </section>
-      <details className="event-list">
-        <summary>Historique du dossier</summary>
-        {proof.events.map((event, index) => (
-          <div key={index}>
-            <span>{date(event.at)}</span>
-            <span>
-              {(
-                {
-                  original_received: 'Original reçu',
-                  manifest_frozen: 'Manifeste figé',
-                  timestamp_verified: 'Jeton d’horodatage vérifié',
-                  challenge_reviewed: 'Défi vérifié visuellement',
-                  protected_copy_issued: 'Copie protégée émise',
-                  recipient_link_created: 'Lien destinataire créé',
-                  recipient_link_revoked: 'Lien destinataire révoqué',
-                  recipient_viewed: 'Dossier consulté par un destinataire',
-                } as Record<string, string>
-              )[event.kind] || event.kind}
-            </span>
-          </div>
-        ))}
-        <p>Historique applicatif ; ne constitue pas un journal d’audit indépendant.</p>
-      </details>
+      {!proof.custody?.length && (
+        <details className="event-list">
+          <summary>Historique du dossier</summary>
+          {proof.events.map((event, index) => (
+            <div key={index}>
+              <span>{date(event.at)}</span>
+              <span>
+                {(
+                  {
+                    original_received: 'Original reçu',
+                    manifest_frozen: 'Manifeste figé',
+                    timestamp_verified: 'Jeton d’horodatage vérifié',
+                    challenge_reviewed: 'Défi vérifié visuellement',
+                    protected_copy_issued: 'Copie protégée émise',
+                    recipient_link_created: 'Lien destinataire créé',
+                    recipient_link_revoked: 'Lien destinataire révoqué',
+                    recipient_viewed: 'Dossier consulté par un destinataire',
+                  } as Record<string, string>
+                )[event.kind] || event.kind}
+              </span>
+            </div>
+          ))}
+          <p>Historique applicatif ; ne constitue pas un journal d’audit indépendant.</p>
+        </details>
+      )}
       {error && <Notice danger>{error}</Notice>}
       <div className="detail-downloads">
-        <a className="button primary" href={`/api/proofs/${proof.id}/export`}>
+        <a
+          className="button primary"
+          href={`/api/proofs/${proof.id}/export`}
+          onClick={() => setTimeout(() => void reload().catch(() => undefined), 2500)}
+        >
           <ArrowDownToLine size={17} /> Dossier complet (.zip)
         </a>
-        <a className="button secondary" href={`/api/proofs/${proof.id}/report`}>
+        <a
+          className="button secondary"
+          href={`/api/proofs/${proof.id}/report`}
+          onClick={() => setTimeout(() => void reload().catch(() => undefined), 2500)}
+        >
           <FileCheck2 size={17} /> Rapport PDF
         </a>
       </div>
+      <p className="detail-downloads-note">
+        Chaque rapport et export est enregistré et signé à son émission, puis inscrit au journal :
+        un destinataire peut vérifier qu’il n’a pas été modifié sur{' '}
+        <a href="/verifier-document" target="_blank" rel="noreferrer">
+          /verifier-document
+        </a>
+        .
+      </p>
       <details className="proof-partners">
         <summary>Faire constater les faits avec un partenaire Preuvix</summary>
         <PartnerDirectory />
@@ -1314,31 +1753,63 @@ function VerificationEntry() {
           <p>Calculez une empreinte ou comparez une copie, sans l’envoyer au serveur.</p>
         </div>
       </div>
-      <LocalFileCheck />
-      <form className="verify-entry" onSubmit={submit}>
-        <div className="round-icon">
-          <ScanLine size={28} />
-        </div>
-        <h2>Vous avez un lien de vérification ?</h2>
-        <p>Retrouvez-le dans le rapport PDF ou demandez-le au propriétaire.</p>
-        <label htmlFor="verify-link">Lien ou jeton de vérification</label>
-        <input
-          id="verify-link"
-          value={link}
-          onChange={(e) => setLink(e.target.value)}
-          placeholder="https://…/verification/…"
-          required
-        />
-        {error && <Notice danger>{error}</Notice>}
-        <button className="button primary">
-          Ouvrir le dossier <ArrowRight size={17} />
-        </button>
-      </form>
+      <Reveal>
+        <LocalFileCheck />
+      </Reveal>
+      <Reveal delay={0.05}>
+        <DocumentCheck owner />
+      </Reveal>
+      <Reveal delay={0.08}>
+        <form className="verify-entry" onSubmit={submit}>
+          <div className="round-icon">
+            <ScanLine size={28} />
+          </div>
+          <h2>Vous avez un lien de vérification ?</h2>
+          <p>Retrouvez-le dans le rapport PDF ou demandez-le au propriétaire.</p>
+          <label htmlFor="verify-link">Lien ou jeton de vérification</label>
+          <input
+            id="verify-link"
+            value={link}
+            onChange={(e) => setLink(e.target.value)}
+            placeholder="https://…/verification/…"
+            required
+          />
+          {error && <Notice danger>{error}</Notice>}
+          <button className="button primary">
+            Ouvrir le dossier <ArrowRight size={17} />
+          </button>
+        </form>
+      </Reveal>
       <Notice>
         La comparaison établit si les octets correspondent au fichier déposé. Elle ne détecte pas à
         elle seule une image générée par IA.
       </Notice>
     </>
+  );
+}
+
+function DocumentVerificationPage() {
+  return (
+    <div className="public-page">
+      <header>
+        <Brand />
+        <a className="text-link" href="/">
+          <ArrowLeft size={16} /> Accueil
+        </a>
+      </header>
+      <main className="verification-card">
+        <span className="eyebrow">VÉRIFICATION D’UN DOCUMENT</span>
+        <h1>Ce document est-il authentique ?</h1>
+        <p>
+          Déposez un rapport PDF ou un export ZIP reçu. Son empreinte est comparée aux documents
+          émis et signés par cette installation.
+        </p>
+        <DocumentCheck />
+      </main>
+      <footer>
+        PREUVIX · Open source · Le document n’est pas envoyé : seule son empreinte l’est.
+      </footer>
+    </div>
   );
 }
 
@@ -1385,7 +1856,11 @@ function PublicVerification({ token }: { token: string }) {
         {error && <Notice danger>{error}</Notice>}
         {!proof && !error && <Spinner />}
         {proof && (
-          <>
+          <motion.div
+            initial={{ opacity: 0, y: 16 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.5, ease: [0.22, 1, 0.36, 1] }}
+          >
             <div className="verification-found">
               <FileCheck2 size={24} />
               <div>
@@ -1405,9 +1880,45 @@ function PublicVerification({ token }: { token: string }) {
                 <p>Contrôle effectué sur les données conservées par cette installation.</p>
               </div>
             </div>
+            <Timeline
+              steps={[
+                { label: 'Dossier retrouvé', detail: shortId(proof.id), state: 'done' },
+                {
+                  label: 'Original conservé intact',
+                  detail: proof.storedFileMatches
+                    ? 'Empreinte recalculée identique'
+                    : 'Empreinte recalculée différente',
+                  state: proof.storedFileMatches ? 'done' : 'alert',
+                },
+                {
+                  label: 'Manifeste intact',
+                  detail: proof.manifestMatches
+                    ? 'Octets du manifeste inchangés'
+                    : 'Manifeste modifié',
+                  state: proof.manifestMatches ? 'done' : 'alert',
+                },
+                {
+                  label: 'Horodatage indépendant',
+                  detail: proof.receipt
+                    ? `${date(proof.receipt.time)} · ${proof.receipt.provider}`
+                    : 'Aucun jeton RFC 3161 obtenu',
+                  state: proof.receipt ? 'done' : 'wait',
+                },
+                {
+                  label: 'Votre copie',
+                  detail:
+                    comparison === 'match'
+                      ? 'Octets identiques à l’original'
+                      : comparison === 'mismatch'
+                        ? 'Fichier différent'
+                        : 'À comparer ci-dessous, sans envoi',
+                  state: comparison === 'match' ? 'done' : comparison ? 'alert' : 'wait',
+                },
+              ]}
+            />
             <div className="hash-box">
               <span>EMPREINTE SHA-256 ATTENDUE</span>
-              <code>{proof.fileHash}</code>
+              <HashReveal value={proof.fileHash} />
             </div>
             <div className="detail-section">
               <h3>Horodatage</h3>
@@ -1443,29 +1954,30 @@ function PublicVerification({ token }: { token: string }) {
                 />
               </label>
               {comparison && (
-                <div className={`comparison ${comparison}`} role="status">
-                  {comparison === 'match' ? <CheckCheck size={21} /> : <X size={21} />}
-                  <div>
-                    <strong>
-                      {comparison === 'match'
-                        ? 'Correspondance exacte des octets'
-                        : 'Le fichier est différent'}
-                    </strong>
-                    <p>
-                      {comparison === 'match'
-                        ? 'Cette copie correspond à l’empreinte publiée. Cela n’atteste pas la réalité de la scène.'
-                        : 'L’empreinte diffère. Une modification, une compression ou un autre fichier peuvent l’expliquer.'}
-                    </p>
-                  </div>
-                </div>
+                <Verdict
+                  match={comparison === 'match'}
+                  icon={comparison === 'match' ? <CheckCheck size={21} /> : <X size={21} />}
+                >
+                  <strong>
+                    {comparison === 'match'
+                      ? 'Correspondance exacte des octets'
+                      : 'Le fichier est différent'}
+                  </strong>
+                  <p>
+                    {comparison === 'match'
+                      ? 'Cette copie correspond à l’empreinte publiée. Cela n’atteste pas la réalité de la scène.'
+                      : 'L’empreinte diffère. Une modification, une compression ou un autre fichier peuvent l’expliquer.'}
+                  </p>
+                </Verdict>
               )}
             </div>
+            <DocumentCheck />
             <Notice>
               <strong>Intégrité ≠ authenticité de la scène.</strong> Un fichier généré par IA peut
               avoir une empreinte et un horodatage valides. Cette page ne certifie ni l’auteur, ni
               le lieu, ni la date de capture.
             </Notice>
-          </>
+          </motion.div>
         )}
       </main>
       <footer>PREUVIX · Open source · Aucun contenu privé n’est affiché sur cette page.</footer>

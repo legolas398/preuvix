@@ -32,16 +32,31 @@ test('owner creates a private record, shares verification, compares locally, exp
     buffer: Buffer.from('000000186674797068656963000000006d69663168656963', 'hex'),
   });
   await expect(page.getByRole('alert')).toContainText('HEIC/HEIF');
-  await expect(page.getByRole('button', { name: 'Conserver ma preuve' })).toBeDisabled();
+  await expect(page.getByRole('button', { name: 'Continuer' })).toBeDisabled();
   await page
     .getByLabel('Choisir une photo', { exact: true })
     .setInputFiles({ name: 'etat-mur.jpg', mimeType: 'image/jpeg', buffer: image });
   await expect(page.getByLabel('Empreinte avant dépôt')).toContainText(expectedHash);
   expect(deposits).toBe(0);
+  await page.getByRole('button', { name: 'Continuer' }).click();
   await page.getByLabel('Titre du dossier').fill('État du mur — test navigateur');
   await page.getByLabel('Contexte').fill('Photo privée de test.');
+  await page.getByRole('button', { name: 'Continuer' }).click();
+  await page.getByLabel('Ajouter des pièces annexes').setInputFiles({
+    name: 'devis-plombier.txt',
+    mimeType: 'text/plain',
+    buffer: Buffer.from('Devis du 3 octobre : remplacement de la canalisation.'),
+  });
+  await expect(page.getByText('devis-plombier.txt')).toBeVisible();
+  await page.getByRole('button', { name: 'Continuer' }).click();
   await page.getByRole('button', { name: 'Conserver ma preuve' }).click();
   await expect(page.getByRole('heading', { name: 'État du mur — test navigateur' })).toBeVisible();
+  await expect(page.getByRole('region', { name: 'Pièces annexes' })).toContainText(
+    'devis-plombier.txt',
+  );
+  await expect(page.getByRole('region', { name: 'Chaîne de preuve' })).toContainText(
+    'Journal de conservation',
+  );
   await expect(page.getByText('Résultat inconclusif', { exact: true })).toBeVisible();
   expect(deposits).toBe(1);
   let privatePosts = 0;
@@ -54,13 +69,11 @@ test('owner creates a private record, shares verification, compares locally, exp
     .getByLabel('Copie à vérifier en privé')
     .setInputFiles({ name: 'original.jpg', mimeType: 'image/jpeg', buffer: image });
   await expect(page.getByText('Correspondance exacte des octets', { exact: true })).toBeVisible();
-  await page
-    .getByLabel('Copie à vérifier en privé')
-    .setInputFiles({
-      name: 'modified.jpg',
-      mimeType: 'image/jpeg',
-      buffer: Buffer.from('modified'),
-    });
+  await page.getByLabel('Copie à vérifier en privé').setInputFiles({
+    name: 'modified.jpg',
+    mimeType: 'image/jpeg',
+    buffer: Buffer.from('modified'),
+  });
   await expect(page.getByText('Le fichier est différent', { exact: true })).toBeVisible();
   expect(privatePosts).toBe(0);
   page.off('request', countPrivatePosts);

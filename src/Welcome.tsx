@@ -1,4 +1,14 @@
-import { useEffect, useState, type ReactNode } from 'react';
+import { useEffect, useState, type PointerEvent, type ReactNode } from 'react';
+import {
+  AnimatePresence,
+  motion,
+  useMotionValue,
+  useReducedMotion,
+  useScroll,
+  useSpring,
+  useTransform,
+} from 'motion/react';
+import { fadeUp } from './motion';
 import {
   ArrowDown,
   ArrowRight,
@@ -102,6 +112,53 @@ const rights = [
     label: 'Preuve électronique',
   },
 ];
+
+const reveal = {
+  initial: 'hidden',
+  whileInView: 'show',
+  viewport: { once: true, margin: '0px 0px -10% 0px' },
+  variants: fadeUp,
+} as const;
+const heroStagger = {
+  hidden: {},
+  show: { transition: { staggerChildren: 0.09, delayChildren: 0.05 } },
+};
+function ScrollProgress() {
+  const { scrollYProgress } = useScroll();
+  const scaleX = useSpring(scrollYProgress, { stiffness: 140, damping: 26, mass: 0.3 });
+  return <motion.div className="scroll-progress" style={{ scaleX }} aria-hidden="true" />;
+}
+/** Hero illustration that tilts toward the pointer and drifts on scroll. */
+function useTilt() {
+  const reduced = useReducedMotion();
+  const px = useMotionValue(0);
+  const py = useMotionValue(0);
+  const rotateY = useSpring(useTransform(px, [-0.5, 0.5], [-7, 7]), {
+    stiffness: 120,
+    damping: 14,
+  });
+  const rotateX = useSpring(useTransform(py, [-0.5, 0.5], [6, -6]), {
+    stiffness: 120,
+    damping: 14,
+  });
+  const { scrollY } = useScroll();
+  const y = useTransform(scrollY, [0, 600], [0, reduced ? 0 : 60]);
+  const onPointerMove = (e: PointerEvent<HTMLDivElement>) => {
+    if (reduced || e.pointerType !== 'mouse') return;
+    const box = e.currentTarget.getBoundingClientRect();
+    px.set((e.clientX - box.left) / box.width - 0.5);
+    py.set((e.clientY - box.top) / box.height - 0.5);
+  };
+  const onPointerLeave = () => {
+    px.set(0);
+    py.set(0);
+  };
+  return {
+    style: reduced ? {} : { rotateX, rotateY, y, transformPerspective: 900 },
+    onPointerMove,
+    onPointerLeave,
+  };
+}
 function RightsExplorer() {
   const [selected, setSelected] = useState(0);
   const right = rights[selected];
@@ -119,15 +176,26 @@ function RightsExplorer() {
           </button>
         ))}
       </div>
-      <article className="right-content" aria-live="polite" aria-atomic="true">
-        <Scale size={30} strokeWidth={1.3} />
-        <span className="welcome-kicker">{right.source}</span>
-        <h3>{right.title}</h3>
-        <p>{right.text}</p>
-        <a href={right.link} target="_blank" rel="noreferrer">
-          Consulter la source officielle <ArrowUpRight size={16} />
-        </a>
-      </article>
+      <div className="right-content-frame" aria-live="polite" aria-atomic="true">
+        <AnimatePresence mode="wait" initial={false}>
+          <motion.article
+            key={right.code}
+            className="right-content"
+            initial={{ opacity: 0, x: 18 }}
+            animate={{ opacity: 1, x: 0 }}
+            exit={{ opacity: 0, x: -12 }}
+            transition={{ duration: 0.25, ease: [0.22, 1, 0.36, 1] }}
+          >
+            <Scale size={30} strokeWidth={1.3} />
+            <span className="welcome-kicker">{right.source}</span>
+            <h3>{right.title}</h3>
+            <p>{right.text}</p>
+            <a href={right.link} target="_blank" rel="noreferrer">
+              Consulter la source officielle <ArrowUpRight size={16} />
+            </a>
+          </motion.article>
+        </AnimatePresence>
+      </div>
     </div>
   );
 }
@@ -142,6 +210,7 @@ function Wordmark() {
 
 export default function Welcome({ children }: { children: ReactNode }) {
   const appearance = useTheme();
+  const tilt = useTilt();
   const [loadingPreview, setLoadingPreview] = useState(false);
   if (loadingPreview)
     return (
@@ -154,6 +223,7 @@ export default function Welcome({ children }: { children: ReactNode }) {
     );
   return (
     <WelcomeBackdrop theme={appearance.theme}>
+      <ScrollProgress />
       <header className="welcome-header">
         <Wordmark />
         <nav aria-label="Navigation d’accueil">
@@ -171,37 +241,43 @@ export default function Welcome({ children }: { children: ReactNode }) {
           Revoir l’écran de chargement <ArrowUpRight size={14} />
         </button>
         <section className="welcome-hero">
-          <div className="hero-copy">
-            <span className="welcome-kicker">
+          <motion.div className="hero-copy" initial="hidden" animate="show" variants={heroStagger}>
+            <motion.span className="welcome-kicker" variants={fadeUp}>
               <span className="live-dot" /> LA PREUVE, À LA PORTÉE DE CHACUN
-            </span>
-            <h1>
+            </motion.span>
+            <motion.h1 variants={fadeUp}>
               Vos droits méritent
               <br />
               des <em>preuves.</em>
-            </h1>
-            <p>
+            </motion.h1>
+            <motion.p variants={fadeUp}>
               Un désaccord, un imprévu, un moment qui compte.
               <br className="desktop-break" /> Conservez les faits aujourd’hui pour faire entendre
               <br className="desktop-break" /> votre voix demain.
-            </p>
-            <div className="hero-actions">
+            </motion.p>
+            <motion.div className="hero-actions" variants={fadeUp}>
               <a className="welcome-button solid" href="#connexion">
                 Commencer gratuitement <ArrowRight size={18} />
               </a>
               <a className="welcome-button subtle" href="#comprendre">
                 Explorer la démo <ArrowDown size={17} />
               </a>
-            </div>
-            <div className="hero-assurance">
+            </motion.div>
+            <motion.div className="hero-assurance" variants={fadeUp}>
               <LockKeyhole size={14} /> Originaux privés <span>·</span> Application open source{' '}
               <span>·</span> Vos données, votre maîtrise
-            </div>
-          </div>
-          <div
+            </motion.div>
+          </motion.div>
+          <motion.div
             className="justice-art"
             aria-label="Illustration : un dossier de preuve au service de vos droits"
             role="img"
+            initial={{ opacity: 0, scale: 0.94 }}
+            animate={{ opacity: 1, scale: 1 }}
+            transition={{ duration: 0.9, ease: [0.22, 1, 0.36, 1], delay: 0.15 }}
+            style={tilt.style}
+            onPointerMove={tilt.onPointerMove}
+            onPointerLeave={tilt.onPointerLeave}
           >
             <div className="art-orbit orbit-one" />
             <div className="art-orbit orbit-two" />
@@ -248,7 +324,7 @@ export default function Welcome({ children }: { children: ReactNode }) {
               <Check size={16} />
             </div>
             <span className="art-caption">UNE TRACE AUJOURD’HUI. UN APPUI DEMAIN.</span>
-          </div>
+          </motion.div>
         </section>
         <div className="welcome-toolbar">
           <span>Un espace à votre image.</span>
@@ -258,7 +334,7 @@ export default function Welcome({ children }: { children: ReactNode }) {
           </a>
         </div>
         <section className="welcome-section" id="comprendre">
-          <div className="section-heading">
+          <motion.div className="section-heading" {...reveal}>
             <div>
               <span className="welcome-kicker">01 / DE LA PHOTO AU DOSSIER</span>
               <h2>
@@ -270,11 +346,13 @@ export default function Welcome({ children }: { children: ReactNode }) {
             <p>
               Découvrez comment une photo devient un dossier dont l’intégrité peut être vérifiée.
             </p>
-          </div>
-          <ProofDemo />
+          </motion.div>
+          <motion.div {...reveal}>
+            <ProofDemo />
+          </motion.div>
         </section>
         <section className="welcome-section rights-section" id="droits">
-          <div className="section-heading">
+          <motion.div className="section-heading" {...reveal}>
             <div>
               <span className="welcome-kicker">02 / CONNAÎTRE SES DROITS</span>
               <h2>
@@ -284,15 +362,17 @@ export default function Welcome({ children }: { children: ReactNode }) {
               </h2>
             </div>
             <p>Six repères pour comprendre le lien entre vos droits, les faits et la preuve.</p>
-          </div>
-          <RightsExplorer />
+          </motion.div>
+          <motion.div {...reveal}>
+            <RightsExplorer />
+          </motion.div>
           <p className="rights-footnote">
             Repères généraux, sans garantie d’admissibilité d’un dossier. L’appréciation de la
             preuve appartient au juge ; Preuvix ne remplace pas un conseil juridique.
           </p>
         </section>
         <section className="welcome-section" id="offres">
-          <div className="section-heading">
+          <motion.div className="section-heading" {...reveal}>
             <div>
               <span className="welcome-kicker">03 / UN ACCÈS POUR CHACUN</span>
               <h2>
@@ -305,9 +385,15 @@ export default function Welcome({ children }: { children: ReactNode }) {
               Commencez avec l’application gratuite. Découvrez Premium à 10,99 € par mois, avec
               paiement via Stripe.
             </p>
-          </div>
-          <div className="plans-grid">
-            <article className="plan-card">
+          </motion.div>
+          <motion.div
+            className="plans-grid"
+            initial="hidden"
+            whileInView="show"
+            viewport={{ once: true, margin: '0px 0px -10% 0px' }}
+            variants={heroStagger}
+          >
+            <motion.article className="plan-card" variants={fadeUp}>
               <span className="plan-label">
                 <Globe2 size={20} /> FREE / GRATUIT
               </span>
@@ -339,10 +425,17 @@ export default function Welcome({ children }: { children: ReactNode }) {
               <a className="welcome-button solid" href="#connexion">
                 Accéder à mon espace gratuit <ArrowRight size={17} />
               </a>
-            </article>
-            <BillingPanel />
-          </div>
-          <section className="constat-section" id="constat" aria-labelledby="constat-title">
+            </motion.article>
+            <motion.div className="plan-motion" variants={fadeUp}>
+              <BillingPanel />
+            </motion.div>
+          </motion.div>
+          <motion.section
+            className="constat-section"
+            id="constat"
+            aria-labelledby="constat-title"
+            {...reveal}
+          >
             <div className="constat-intro">
               <span className="welcome-kicker">
                 <Scale size={18} /> PARCOURS PREMIUM · CONSTAT PROFESSIONNEL
@@ -436,9 +529,11 @@ export default function Welcome({ children }: { children: ReactNode }) {
               Comprendre le constat · Chambre nationale des commissaires de justice{' '}
               <ArrowUpRight size={14} />
             </a>
-          </section>
+          </motion.section>
         </section>
-        <CommunitySpaces />
+        <motion.div {...reveal}>
+          <CommunitySpaces />
+        </motion.div>
         <section className="welcome-section connection-section" id="connexion">
           <div>
             <span className="welcome-kicker">À VOUS D’ÉCRIRE LA SUITE</span>

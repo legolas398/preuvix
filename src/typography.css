@@ -45,7 +45,10 @@ textarea {
   letter-spacing: -0.055em;
   font-weight: 700;
 }
-.welcome h1 em, .welcome h2 em, .welcome h3 em, .partner-heading em {
+.welcome h1 em,
+.welcome h2 em,
+.welcome h3 em,
+.partner-heading em {
   font-style: normal;
   font-weight: inherit;
 }
@@ -55,18 +58,37 @@ textarea {
   text-underline-offset: 0.12em;
   text-decoration-color: var(--w-accent);
 }
-.welcome .welcome-brand { font-weight: 700; letter-spacing: -0.06em; }
-.welcome-kicker, .eyebrow, .demo-document-top {
+.welcome .welcome-brand {
+  font-weight: 700;
+  letter-spacing: -0.06em;
+}
+.welcome-kicker,
+.eyebrow,
+.demo-document-top {
   font-family: ui-monospace, 'Cascadia Code', Consolas, monospace;
   letter-spacing: 0.09em;
 }
-.welcome .section-heading h2, .welcome .connection-section h2 {
+.welcome .section-heading h2,
+.welcome .connection-section h2 {
   font-size: clamp(28px, 3.2vw, 38px);
   line-height: 1.2;
 }
-.partner-map-toolbar h4 { font-weight: 700; font-size: 25px; letter-spacing: -0.035em; }
-.demo-real-document { font-family: var(--font-body); line-height: 1.8; }
+.partner-map-toolbar h4 {
+  font-weight: 700;
+  font-size: 25px;
+  letter-spacing: -0.035em;
+}
+.demo-real-document {
+  font-family: var(--font-body);
+  line-height: 1.8;
+}
 @media (max-width: 600px) {
-  .welcome .hero-copy h1 { font-size: clamp(36px, 10.5vw, 52px); }
-  .welcome h2, .welcome h3, .partner-map-toolbar h4 { overflow-wrap: anywhere; }
+  .welcome .hero-copy h1 {
+    font-size: clamp(36px, 10.5vw, 52px);
+  }
+  .welcome h2,
+  .welcome h3,
+  .partner-map-toolbar h4 {
+    overflow-wrap: anywhere;
+  }
 }
