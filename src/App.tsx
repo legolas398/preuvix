@@ -42,6 +42,7 @@ import RecipientPage from './RecipientPage';
 import { HEIF_MESSAGE, MAX_PHOTO_BYTES, photoFormat } from '../shared/photo-format';
 import { sha256File } from './file-hash';
 import LocalFileCheck from './LocalFileCheck';
+import PhotoVerification from './PhotoVerification';
 import Welcome, { JusticeLoading } from './Welcome';
 import PartnerDirectory from './PartnerDirectory';
 import BillingPanel from './BillingPanel';
@@ -560,7 +561,12 @@ function Workspace({ config, onLogout }: { config: AppConfig; onLogout: () => Pr
               <BillingPanel privateWorkspace onQuotaChange={setStorageLimit} />
             </section>
           ) : tab === 'verify' ? (
-            <VerificationEntry />
+            <PhotoVerification
+              references={proofs.map((p) => ({
+                title: p.manifest.title,
+                sha256: p.manifest.file.sha256,
+              }))}
+            />
           ) : (
             <About config={config} />
           )}

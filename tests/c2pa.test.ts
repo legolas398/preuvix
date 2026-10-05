@@ -9,6 +9,7 @@ import request from 'supertest';
 import sharp from 'sharp';
 import { Builder, LocalSigner } from '@contentauth/c2pa-node';
 import { validateContentCredentials } from '../server/c2pa';
+import { verifyPhoto } from '../server/photo-verification';
 import { assessCertification } from '../shared/certification-policy';
 import { Store } from '../server/store';
 import { readConfig } from '../server/config';
@@ -123,6 +124,32 @@ test('C2PA signatures are validated: trusted capture, unknown signer, declared A
     const input = await photo();
     assert.equal((await validateContentCredentials(input, 'image/jpeg', '')).state, 'absent');
     const camera = await authority.sign(input, 'digitalCapture');
+    const verification = await verifyPhoto(camera, hash(camera), authority.anchors);
+    assert.equal(verification.integrity.result, 'correspondance exacte');
+    assert.equal(verification.provenance.binding, 'validée');
+    assert.equal(verification.provenance.signature, 'validée');
+    assert.equal(verification.provenance.trust, 'reconnu par le bundle local');
+    const synthetic = await verifyPhoto(
+      await authority.sign(input, 'trainedAlgorithmicMedia'),
+      '',
+      authority.anchors,
+    );
+    assert.equal(synthetic.ai.declarations[0].validation, 'signature et liaison validées');
+    assert.match(synthetic.ai.declarations[0].digitalSourceType, /trainedAlgorithmicMedia$/);
+    const recompressed = await verifyPhoto(
+      await sharp(camera).jpeg({ quality: 60 }).toBuffer(),
+      hash(camera),
+      authority.anchors,
+    );
+    assert.equal(recompressed.integrity.result, 'contenu différent');
+    assert.equal(recompressed.provenance.presence, 'absent');
+    await assert.rejects(verifyPhoto(Buffer.from('not an image'), '', ''), /invalide/);
+    const changed = Buffer.from(camera);
+    // Change the JPEG density byte: decoding remains valid, signed bytes differ.
+    changed[15] ^= 1;
+    const changedResult = await verifyPhoto(changed, hash(camera), authority.anchors);
+    assert.equal(changedResult.integrity.result, 'contenu différent');
+    assert.equal(changedResult.provenance.binding, 'invalide');
     const trusted = await validateContentCredentials(camera, 'image/jpeg', authority.anchors);
     assert.equal(trusted.state, 'trusted');
     assert.equal(trusted.signer?.commonName, 'Test Camera');

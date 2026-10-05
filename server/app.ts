@@ -23,6 +23,7 @@ import { inspectMedia } from './media';
 import { validateContentCredentials } from './c2pa';
 import { newWatermarkCode, similarity, watermarking } from './watermark';
 import { shortId } from '../shared/format';
+import { verifyPhoto } from './photo-verification';
 
 export function createApp(
   config: Config,
@@ -112,6 +113,71 @@ export function createApp(
       return void res.status(401).json({ error: 'Connectez-vous à votre espace.' });
     next();
   };
+  let photoBusy = false;
+  const photoUpload = multer({
+    storage: multer.memoryStorage(),
+    limits: { fileSize: 10 * 1024 * 1024, files: 1, fields: 2, fieldSize: 256 },
+  });
+  app.post(
+    '/api/photo-verification',
+    requireAuth,
+    (req, res, next) => {
+      if (photoBusy)
+        return void res.status(429).json({ error: 'Une vérification est en cours. Réessayez.' });
+      photoBusy = true;
+      res.once('finish', () => {
+        photoBusy = false;
+      });
+      res.once('close', () => {
+        photoBusy = false;
+      });
+      next();
+    },
+    photoUpload.single('file'),
+    async (req, res) => {
+      try {
+        if (!req.file) throw new Error('Sélectionnez une photo.');
+        const result = await verifyPhoto(
+          req.file.buffer,
+          String(req.body.reference || '')
+            .trim()
+            .toLowerCase(),
+          config.c2paTrustAnchors,
+        );
+        if (req.body.clientSha256 !== result.file.sha256)
+          throw new Error('Les octets reçus ne correspondent pas à l’empreinte du navigateur.');
+        // Free-form metadata and assertions can themselves contain private information.
+        // Keep them on screen only; the default signed export contains control outcomes.
+        const manifest = {
+          ...result,
+          ai: {
+            ...result.ai,
+            declarations: result.ai.declarations.map((d) => ({
+              ...d,
+              action: /^c2pa\.[a-zA-Z]+$/.test(d.action) ? d.action : 'autre',
+              digitalSourceType:
+                /^https?:\/\/cv\.iptc\.org\/newscodes\/digitalsourcetype\/[a-zA-Z]+$/.test(
+                  d.digitalSourceType,
+                )
+                  ? d.digitalSourceType
+                  : 'déclaration exclue pour confidentialité',
+            })),
+          },
+          context: {
+            ...result.context,
+            exif: {},
+            software: null,
+            dates: {},
+            metadataExport: 'Métadonnées déclarées exclues par défaut',
+          },
+        };
+        const attestation = certificates.attest(manifest);
+        res.json({ result, manifest, attestation });
+      } catch (error) {
+        res.status(400).json({ error: (error as Error).message });
+      }
+    },
+  );
   app.get('/api/config', async (req, res) => {
     const isAuthenticated = authenticated(req);
     const storageLimit = isAuthenticated

@@ -9,6 +9,8 @@ import {
 } from 'node:crypto';
 import { readFileSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
+import { execFileSync } from 'node:child_process';
+import { fileURLToPath } from 'node:url';
 import type { Store } from './store';
 import { hash } from './integrity';
 import type { Manifest } from '../shared/types';
@@ -45,17 +47,31 @@ export function newChallenge(): LivenessChallenge {
 }
 
 export function certification(store: Store, directory: string) {
+  store.db.exec('CREATE TABLE IF NOT EXISTS signing_key_history (key_id TEXT PRIMARY KEY)');
   const keyPath = path.join(directory, 'attestation-ed25519.pem');
   let pem: string;
   try {
     pem = readFileSync(keyPath, 'utf8');
   } catch (error) {
     if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error;
+    const existing = store.db.prepare('SELECT count(*) AS n FROM attestations').get() as {
+      n: number;
+    };
+    const history = store.db.prepare('SELECT count(*) AS n FROM signing_key_history').get() as {
+      n: number;
+    };
+    if (existing.n > 0 || history.n > 0)
+      throw new Error(
+        'Clé Ed25519 manquante : restaurez la clé sauvegardée. Aucune régénération automatique.',
+      );
     const generated = generateKeyPairSync('ed25519')
       .privateKey.export({ type: 'pkcs8', format: 'pem' })
       .toString();
     try {
       writeFileSync(keyPath, generated, { mode: 0o600, flag: 'wx' });
+      if (process.platform === 'win32') {
+        execFileSync('powershell.exe', ['-NoProfile', '-File', fileURLToPath(new URL('../scripts/protect-signing-key.ps1', import.meta.url)), '-KeyPath', keyPath], { windowsHide: true, stdio: 'pipe' });
+      }
     } catch (e) {
       if ((e as NodeJS.ErrnoException).code !== 'EEXIST') throw e;
     }
@@ -65,6 +81,7 @@ export function certification(store: Store, directory: string) {
   if (privateKey.asymmetricKeyType !== 'ed25519') throw new Error('Invalid attestation key.');
   const publicKey = createPublicKey(privateKey).export({ type: 'spki', format: 'pem' }).toString();
   const keyId = hash(publicKey);
+  store.db.prepare('INSERT OR IGNORE INTO signing_key_history VALUES (?)').run(keyId);
   // Public keys retired by scripts/rotate-key.mjs: older dossiers still verify against them.
   let retiredKeys: { keyId: string; publicKey: string; retiredAt: string }[] = [];
   try {
@@ -143,7 +160,7 @@ export function certification(store: Store, directory: string) {
       throw new Error('Le délai de dépôt de 24 heures est dépassé.');
     return record;
   }
-  function attest(manifest: Manifest): Attestation {
+  function attest(manifest: object): Attestation {
     const bytes = Buffer.from(JSON.stringify(manifest));
     return {
       algorithm: 'Ed25519',
