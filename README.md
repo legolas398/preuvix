@@ -1,6 +1,8 @@
 # PREUVIX
 
-Pilote open source pour la France : capturer ou importer une photo ou une vidéo, figer son empreinte et son contexte, signer le manifeste, obtenir un jeton RFC 3161 si un prestataire est configuré, exporter un dossier et comparer les fichiers. Licence MIT. Facturation Stripe optionnelle.
+Prototype privé local : capturer ou importer une photo ou une vidéo, figer son empreinte et son contexte, signer le manifeste, exporter un dossier et comparer les fichiers. Licence MIT. Aucun paiement ni envoi professionnel dans le mode prototype, activé par défaut.
+
+La [structure des écrans et le parcours Premium](docs/parcours-premium.md) décrivent la sélection des pièces, les brouillons, les informations accessibles et les tests. `PREMIUM_TRANSMISSION_TEST=false` par défaut ; seul le serveur peut accorder cet accès de test.
 
 ## Capture documentée et attestation
 
@@ -140,9 +142,9 @@ Références primaires :
 - [OpenSSL : protocole et vérification RFC 3161](https://docs.openssl.org/3.6/man1/openssl-ts/)
 - [C2PA : spécification de provenance](https://spec.c2pa.org/)
 
-## Abonnement Stripe
+## Préparation Premium
 
-Premium est prévu à **10,99 € par mois**, avec Checkout hébergé par Stripe et portail client. La facturation reste désactivée sans les identifiants de test. Voir [la configuration Stripe](docs/stripe-setup.md) pour les variables serveur, webhooks, essais et limites de déploiement. Aucun paiement réel n’est activé par défaut. Le quota Premium est effectivement contrôlé au dépôt ; les preuves déjà conservées ne sont pas supprimées après résiliation.
+Offre en préparation, sans prix proposé dans ce prototype. L’accès de test permet une préparation avec sélection explicite et lien révocable ; il ne dépend pas d’un paiement. Les éventuels honoraires du commissaire sont distincts. Le module Stripe historique reste dans le code mais `PRIVATE_PROTOTYPE=true` bloque ses opérations et ses appels distants. Sa documentation historique ne définit pas l’offre actuelle.
 
 ## Répertoire des partenaires Preuvix
 
@@ -152,7 +154,7 @@ La carte interactive utilise Leaflet et les tuiles OpenStreetMap (connexion requ
 
 La démo compare réellement deux textes UTF-8 avec SHA-256 dans le navigateur. Les trois scénarios sont fictifs ; le rapport téléchargeable n’est ni un horodatage ni un constat professionnel. Les polices Outfit et Syne sont hébergées avec l’application.
 
-Le répertoire est accessible dans la section commissaire de justice de l’accueil et dans chaque dossier, après les exports. Il propose recherche par étude, ville ou département, filtre par type de constat, fiche officielle, préparation locale d’une demande téléchargeable et accès au site de l’étude. Aucun message ni fichier n’est transmis automatiquement.
+Le répertoire est accessible sur la page séparée `/annuaire`, liée depuis l’aide et le dossier. Il propose recherche par étude, ville ou département, filtre par type de constat, fiche officielle, préparation locale d’une demande téléchargeable et accès au site de l’étude. Aucun message ni fichier n’est transmis automatiquement.
 
 Pour alimenter le réseau, créer `partners.json` dans le répertoire `DATA_DIR` (par défaut `data/partners.json`) à partir de `server/partners.example.json`. Remplacer toutes les valeurs d’exemple par les coordonnées approuvées d’une étude réelle. Après confirmation de son accord de partenariat et vérification de sa fiche officielle, passer `partnershipConfirmed` et `published` à `true`. Ces deux indicateurs sont nécessaires pour publier. Mettre `published` à `false` pour retirer une fiche. Ne jamais publier les exemples comme des partenaires.
 

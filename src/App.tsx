@@ -43,9 +43,11 @@ import { HEIF_MESSAGE, MAX_PHOTO_BYTES, photoFormat } from '../shared/photo-form
 import { sha256File } from './file-hash';
 import LocalFileCheck from './LocalFileCheck';
 import PhotoVerification from './PhotoVerification';
-import Welcome, { JusticeLoading } from './Welcome';
+import Welcome, { JusticeLoading, RightsExplorer } from './Welcome';
 import PartnerDirectory from './PartnerDirectory';
-import BillingPanel from './BillingPanel';
+import TransmissionWorkspace, { PremiumCard, TransmissionConsultation } from './Transmission';
+import Terms from './Terms';
+import CommunitySpaces from './CommunitySpaces';
 import CapturePanel from './CapturePanel';
 import { PageAppearance } from './Theme';
 
@@ -137,6 +139,8 @@ export default function App() {
   const recipientToken = window.location.pathname.match(/^\/dossier\/([a-f0-9]{64})$/)?.[1];
   if (token) return <PublicVerification token={token} />;
   if (recipientToken) return <RecipientPage token={recipientToken} />;
+  const consultationToken = window.location.pathname.match(/^\/consultation\/([a-f0-9]{64})$/)?.[1];
+  if (consultationToken) return <TransmissionConsultation token={consultationToken} />;
   if (error)
     return (
       <div className="loading-page">
@@ -148,6 +152,49 @@ export default function App() {
       </div>
     );
   if (!config) return <JusticeLoading />;
+  if (window.location.pathname === '/comprendre')
+    return (
+      <main className="knowledge-page">
+        <a href="/">← Retour à PREUVIX</a>
+        <About config={config} />
+        <section id="premium">
+          <h2>Préparation Premium · Offre en préparation</h2>
+          <p>
+            Sélectionnez des pièces, vérifiez un résumé et les informations accessibles, puis créez
+            un lien révocable. Le contrôle de complétude vérifie les champs et les pièces, pas leur
+            valeur juridique.
+          </p>
+          <p>
+            Le nom du destinataire est une étiquette. Toute personne ayant le lien peut le
+            consulter. Aucun envoi, constat automatique, acceptation ou garantie juridique.
+          </p>
+          <p>L’option PREUVIX et les éventuels honoraires du commissaire sont distincts.</p>
+          <a href="/">Revenir à mon espace</a>
+        </section>
+        <details id="reperes">
+          <summary>Repères et sources</summary>
+          <RightsExplorer />
+        </details>
+        <a href="/annuaire">Consulter l’annuaire séparément</a>
+        <details>
+          <summary>Communauté</summary>
+          <CommunitySpaces />
+        </details>
+        <Terms />
+      </main>
+    );
+  if (window.location.pathname === '/annuaire')
+    return (
+      <main className="knowledge-page">
+        <a href="/">← Retour à PREUVIX</a>
+        <h1>Annuaire des commissaires de justice</h1>
+        <p>
+          La consultation de l’annuaire est indépendante de Premium. Aucun dossier n’est envoyé
+          depuis cette page.
+        </p>
+        <PartnerDirectory />
+      </main>
+    );
   if (!config.authenticated)
     return <Login onLogin={() => api<AppConfig>('/api/config').then(setConfig)} />;
   return (
@@ -230,7 +277,8 @@ function Workspace({ config, onLogout }: { config: AppConfig; onLogout: () => Pr
     }
     return 'proofs';
   });
-  const [storageLimit, setStorageLimit] = useState(config.maxStorageMb);
+  const storageLimit = config.maxStorageMb;
+  const [transmissionProof, setTransmissionProof] = useState<string | undefined>();
   useEffect(() => {
     try {
       sessionStorage.removeItem('preuvix-open-billing');
@@ -274,17 +322,42 @@ function Workspace({ config, onLogout }: { config: AppConfig; onLogout: () => Pr
         </div>
         <span className="nav-label">ESPACE DE TRAVAIL</span>
         <nav>
-          <button className={tab === 'proofs' ? 'active' : ''} onClick={() => setTab('proofs')}>
-            <FolderLock size={19} /> Mes preuves <span className="nav-count">{proofs.length}</span>
+          <button
+            className={tab === 'proofs' ? 'active' : ''}
+            onClick={() => {
+              setSelected(null);
+              setTab('proofs');
+            }}
+          >
+            <FolderLock size={19} /> Mes dossiers <span className="nav-count">{proofs.length}</span>
           </button>
-          <button className={tab === 'verify' ? 'active' : ''} onClick={() => setTab('verify')}>
+          <button
+            className={tab === 'verify' ? 'active' : ''}
+            onClick={() => {
+              setSelected(null);
+              setTab('verify');
+            }}
+          >
             <ScanLine size={19} /> Vérifier un fichier
           </button>
-          <button className={tab === 'about' ? 'active' : ''} onClick={() => setTab('about')}>
+          <button
+            className={tab === 'about' ? 'active' : ''}
+            onClick={() => {
+              setSelected(null);
+              setTab('about');
+            }}
+          >
             <CircleHelp size={19} /> Comprendre PREUVIX
           </button>
-          <button className={tab === 'billing' ? 'active' : ''} onClick={() => setTab('billing')}>
-            <Sparkles size={19} /> Mon abonnement
+          <button
+            className={tab === 'billing' ? 'active' : ''}
+            onClick={() => {
+              setSelected(null);
+              setTransmissionProof(undefined);
+              setTab('billing');
+            }}
+          >
+            <Sparkles size={19} /> Préparation Premium
           </button>
         </nav>
         <PageAppearance />
@@ -316,11 +389,11 @@ function Workspace({ config, onLogout }: { config: AppConfig; onLogout: () => Pr
             Mon espace <ChevronRight size={14} />
             <strong>
               {tab === 'proofs'
-                ? 'Mes preuves'
+                ? 'Mes dossiers'
                 : tab === 'verify'
                   ? 'Vérification'
                   : tab === 'billing'
-                    ? 'Abonnement'
+                    ? 'Préparation Premium'
                     : 'Fonctionnement'}
             </strong>
           </div>
@@ -337,13 +410,32 @@ function Workspace({ config, onLogout }: { config: AppConfig; onLogout: () => Pr
         </header>
         <main className="main-content">
           {error && <Notice danger>{error}</Notice>}
-          {tab === 'proofs' ? (
+          {selected ? (
+            <ProofDetail
+              proof={selected}
+              onTransmission={() => {
+                setTransmissionProof(selected.id);
+                setSelected(null);
+                setTab('billing');
+              }}
+              config={config}
+              close={() => setSelected(null)}
+              onChange={async (proof) => {
+                setSelected(proof);
+                await refresh();
+              }}
+              onDelete={async () => {
+                setSelected(null);
+                await refresh();
+              }}
+            />
+          ) : tab === 'proofs' ? (
             <>
               <div className="page-heading">
                 <div>
                   <span className="eyebrow">VOTRE MÉMOIRE NUMÉRIQUE</span>
                   <h1>
-                    Mes preuves<span className="heading-dot">.</span>
+                    Mes dossiers<span className="heading-dot">.</span>
                   </h1>
                   <p>Conservez l’original. Documentez son intégrité. Gardez la main.</p>
                 </div>
@@ -351,105 +443,6 @@ function Workspace({ config, onLogout }: { config: AppConfig; onLogout: () => Pr
                   <Plus size={18} /> Créer une preuve
                 </button>
               </div>
-              <section className="intro-card">
-                <div>
-                  <span className="intro-kicker">
-                    <span /> SIMPLE À CRÉER, POSSIBLE À VÉRIFIER
-                  </span>
-                  <h2>
-                    Une photo aujourd’hui.
-                    <br />
-                    Une trace pour demain.
-                  </h2>
-                  <p>
-                    Déposez une photo et retrouvez son original,
-                    <br className="desktop-break" /> son empreinte et son rapport au même endroit.
-                  </p>
-                  <button className="text-link" onClick={() => setTab('about')}>
-                    Comment vos fichiers sont protégés <ArrowRight size={16} />
-                  </button>
-                </div>
-                <div className="proof-illustration" aria-hidden="true">
-                  <div className="orbit orbit-one" />
-                  <div className="orbit orbit-two" />
-                  <div className="illustration-card">
-                    <div className="illustration-top">
-                      <Fingerprint size={20} />
-                      <span>PREUVIX</span>
-                      <span className="illustration-dot" />
-                    </div>
-                    <div className="illustration-image">
-                      <div className="illustration-sun" />
-                      <div className="illustration-hill hill-one" />
-                      <div className="illustration-hill hill-two" />
-                    </div>
-                    <div className="illustration-line" />
-                    <div className="illustration-line short" />
-                    <div className="illustration-bottom">
-                      <LockKeyhole size={12} /> ORIGINAL CONSERVÉ
-                    </div>
-                  </div>
-                  <div className="floating-seal">
-                    <ShieldCheck size={28} />
-                  </div>
-                  <span className="illustration-spark spark-one">+</span>
-                  <span className="illustration-spark spark-two">+</span>
-                </div>
-              </section>
-              <section className="stats-grid">
-                <div className="stat">
-                  <span className="stat-icon">
-                    <FolderLock size={20} />
-                  </span>
-                  <div>
-                    <span>Preuves conservées</span>
-                    <strong>{proofs.length.toString().padStart(2, '0')}</strong>
-                  </div>
-                  <small>Originaux privés</small>
-                </div>
-                <div className="stat">
-                  <span className="stat-icon sage">
-                    <ShieldCheck size={20} />
-                  </span>
-                  <div>
-                    <span>Horodatages vérifiés</span>
-                    <strong>
-                      {proofs
-                        .filter((p) => p.status === 'timestamped')
-                        .length.toString()
-                        .padStart(2, '0')}
-                    </strong>
-                  </div>
-                  <small>Jetons RFC 3161</small>
-                </div>
-                <div className="stat">
-                  <span className="stat-icon sand">
-                    <Link2 size={20} />
-                  </span>
-                  <div>
-                    <span>Liens de vérification</span>
-                    <strong>
-                      {proofs
-                        .filter((p) => p.shareToken)
-                        .length.toString()
-                        .padStart(2, '0')}
-                    </strong>
-                  </div>
-                  <small>Partage à votre initiative</small>
-                </div>
-              </section>
-              {!config.timestampConfigured && (
-                <div className="provider-note">
-                  <Clock3 size={17} />
-                  <span>
-                    <strong>Horodatage indépendant non configuré.</strong> Vos dépôts sont conservés
-                    en attente. Aucun horodatage qualifié n’est revendiqué.
-                  </span>
-                  <button onClick={() => setTab('about')}>
-                    En savoir plus <ArrowRight size={14} />
-                  </button>
-                </div>
-              )}
               <section className="records">
                 <div className="records-heading">
                   <h2>
@@ -544,6 +537,13 @@ function Workspace({ config, onLogout }: { config: AppConfig; onLogout: () => Pr
                   </div>
                 )}
               </section>
+              <PremiumCard
+                enabled={config.premiumTransmissionTest}
+                onOpen={() => {
+                  setTransmissionProof(undefined);
+                  setTab('billing');
+                }}
+              />
               <div className="bottom-assurance">
                 <span>
                   <LockKeyhole size={14} /> Privé par défaut
@@ -558,7 +558,11 @@ function Workspace({ config, onLogout }: { config: AppConfig; onLogout: () => Pr
             </>
           ) : tab === 'billing' ? (
             <section className="billing-workspace">
-              <BillingPanel privateWorkspace onQuotaChange={setStorageLimit} />
+              <TransmissionWorkspace
+                enabled={config.premiumTransmissionTest}
+                proofs={proofs}
+                initialProofId={transmissionProof}
+              />
             </section>
           ) : tab === 'verify' ? (
             <PhotoVerification
@@ -585,21 +589,6 @@ function Workspace({ config, onLogout }: { config: AppConfig; onLogout: () => Pr
           onCreated={async (proof) => {
             setCreating(false);
             setSelected(proof);
-            await refresh();
-          }}
-        />
-      )}
-      {selected && (
-        <ProofDetail
-          proof={selected}
-          config={config}
-          close={() => setSelected(null)}
-          onChange={async (proof) => {
-            setSelected(proof);
-            await refresh();
-          }}
-          onDelete={async () => {
-            setSelected(null);
             await refresh();
           }}
         />
@@ -844,8 +833,8 @@ function CreateProof({
                 contenir ses propres métadonnées.
               </span>
             </div>
-            <div className="capture-declaration">
-              <h3>Documenter les faits</h3>
+            <details className="capture-declaration">
+              <summary>Déclarations complémentaires (facultatives)</summary>
               {captureId && (
                 <p>
                   Empreinte engagée auprès du serveur. Déposez ce média dans les 24 heures.
@@ -893,7 +882,7 @@ function CreateProof({
                 et complétez les deux champs. Aucun score « sans IA » ni garantie de recevabilité
                 n’est délivré.
               </p>
-            </div>
+            </details>
             {!config.timestampConfigured && (
               <Notice>
                 Le fichier sera conservé <strong>en attente d’horodatage</strong>. Le prestataire
@@ -935,6 +924,7 @@ function CreateProof({
 }
 
 function ProofDetail({
+  onTransmission,
   proof,
   config,
   close,
@@ -946,6 +936,7 @@ function ProofDetail({
   close: () => void;
   onChange: (proof: Proof) => Promise<void>;
   onDelete: () => Promise<void>;
+  onTransmission: () => void;
 }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
@@ -964,11 +955,24 @@ function ProofDetail({
     }
   };
   return (
-    <Modal title={proof.manifest.title} close={close} wide>
+    <article className="dossier-page">
+      <button className="text-link" onClick={close}>
+        ← Mes dossiers
+      </button>
+      <h1>{proof.manifest.title}</h1>
+      <nav className="dossier-navigation" aria-label="Sections du dossier">
+        <a href="#resume">Résumé</a>
+        <a href="#documents">Documents</a>
+        <a href="#controle">Vérification</a>
+        <a href="#export">Export</a>
+        <a href="#transmission">Transmission Premium</a>
+      </nav>
+      <h2 id="resume">Résumé</h2>
       <div className="detail-meta">
         <span>{shortId(proof.id)}</span>
         <Status proof={proof} />
       </div>
+      <h2 id="documents">Documents</h2>
       <div className="detail-layout">
         <div className="detail-image">
           {proof.manifest.file.mime.startsWith('video/') ? (
@@ -1013,6 +1017,7 @@ function ProofDetail({
       {proof.manifest.description && (
         <p className="detail-description">{proof.manifest.description}</p>
       )}
+      <h2 id="controle">Vérification</h2>
       <div className="hash-box">
         <span>
           <Fingerprint size={16} /> EMPREINTE SHA-256 DE L’ORIGINAL
@@ -1023,210 +1028,218 @@ function ProofDetail({
         <summary>Comparer une copie avec ce dossier</summary>
         <LocalFileCheck expectedHash={proof.manifest.file.sha256} />
       </details>
-      <section className="capture-evidence" aria-label="Attestation technique">
-        {proof.manifest.certification && (
-          <section aria-label="Processus de certification">
-            <h3>Certification photo / vidéo · protection contre les falsifications</h3>
-            <p
-              className={`provenance-label ${proof.manifest.certification.status === 'review_required' ? 'signal' : ''}`}
-            >
-              {certificationLabels[proof.manifest.certification.status]}
-            </p>
-            <ol>
-              {proof.manifest.certification.checks.map((check) => (
-                <li key={check.id}>
-                  <strong>
-                    {check.result === 'passed'
-                      ? 'Contrôlé'
-                      : check.result === 'review'
-                        ? 'À examiner'
-                        : 'Non établi'}
-                  </strong>{' '}
-                  — {check.detail}
-                </li>
-              ))}
-            </ol>
-            <p>
-              {proof.manifest.certification.aiAuthenticity === 'camera_provenance_verified'
-                ? 'Cette évaluation est incluse dans le manifeste signé. La signature de l’appareil atteste une capture matérielle ; une mise en scène ou un écran photographié restent possibles.'
-                : 'Cette évaluation est incluse dans le manifeste signé. Aucun certificat « sans IA » n’est délivré. En présence d’indices, faites examiner l’original et son contexte avant de vous fier à la scène.'}
-            </p>
-          </section>
-        )}
-        <ChallengeReview
-          proof={proof}
-          busy={busy}
-          submit={(input) =>
-            act(async () =>
-              onChange(
-                await api(`/api/proofs/${proof.id}/review`, {
-                  method: 'POST',
-                  body: JSON.stringify(input),
-                }),
-              ),
-            )
-          }
-        />
-        <h3>Attestation technique et protection du dossier</h3>
-        <p>
-          {proof.attestation
-            ? 'Manifeste signé par cette installation (Ed25519). Le PDF explique les contrôles ; le ZIP contient la signature et la clé publique.'
-            : 'Dossier antérieur : aucune signature technique enregistrée.'}
-        </p>
-        <p>
-          {proof.manifest.capture
-            ? `Capture engagée auprès du serveur le ${new Date(proof.manifest.capture.committedAt).toLocaleString('fr-FR')}.`
-            : 'Pas de session de capture engagée : origine uniquement déclarée.'}
-        </p>
-        <p>
-          Identité du déposant non vérifiée · réalité des faits non certifiée · aucun verdict
-          automatique sur l’IA. Les indices ne justifient pas, seuls, de rejeter une preuve.
-        </p>
-        {proof.manifest.declaration && (
-          <p>
-            Auteur déclaré : {proof.manifest.declaration.author}
-            <br />
-            {proof.manifest.declaration.context}
-          </p>
-        )}
-      </section>
-      <section className="detail-section">
-        <h3>
-          <Clock3 size={17} /> Horodatage indépendant
-        </h3>
-        {proof.receipt ? (
-          <>
-            <p>
-              Jeton RFC 3161 signé par <strong>{proof.receipt.provider}</strong>, daté du{' '}
-              {date(proof.receipt.time)}. Signature vérifiée à la réception.
-            </p>
-            <p className="muted">
-              Qualification :{' '}
-              {proof.receipt.qualification === 'operator_reviewed'
-                ? 'service examiné par l’opérateur. La qualification eIDAS n’est pas validée automatiquement.'
-                : 'non évaluée.'}
-            </p>
-          </>
-        ) : (
-          <>
-            <p>
-              Aucun jeton indépendant obtenu. La date du dépôt n’est pas un horodatage qualifié.
-            </p>
-            <button
-              className="button secondary small"
-              disabled={busy || !config.timestampConfigured}
-              onClick={() =>
-                act(async () =>
-                  onChange(await api(`/api/proofs/${proof.id}/timestamp`, { method: 'POST' })),
-                )
-              }
-            >
-              {busy ? <Spinner /> : <Clock3 size={15} />} Réessayer l’horodatage
-            </button>
-          </>
-        )}
-      </section>
-      <section className="detail-section">
-        <h3>
-          <Sparkles size={17} /> Provenance & indices IA
-        </h3>
-        <span
-          className={`provenance-label ${proof.manifest.provenance.signals.length ? 'signal' : ''}`}
-        >
-          {proof.manifest.provenance.signals.length
-            ? 'Indices déclaratifs présents'
-            : 'Résultat inconclusif'}
-        </span>
-        {proof.manifest.provenance.signals.length > 0 && (
-          <ul>
-            {proof.manifest.provenance.signals.map((s) => (
-              <li key={s}>{s}</li>
-            ))}
-          </ul>
-        )}
-        <p>{proof.manifest.provenance.explanation}</p>
-        <ContentCredentialsSummary proof={proof} />
-      </section>
-      <ProtectionPanel
-        proof={proof}
-        onChange={async () => onChange(await api<Proof>(`/api/proofs/${proof.id}`))}
-      />
-      <RecipientLinks proof={proof} onChange={onChange} />
-      <section className="detail-section">
-        <h3>
-          <Link2 size={17} /> Partage de vérification
-        </h3>
-        <p>
-          Le lien révèle les empreintes et le statut d’horodatage, sans exposer la photo ni sa
-          description. Toute personne ayant ce lien peut le consulter.
-        </p>
-        {proof.shareToken ? (
-          <>
-            <div className="share-url">
-              <code>
-                {location.origin}/verification/{proof.shareToken}
-              </code>
-              <button
-                className="icon-button"
-                aria-label="Copier le lien"
-                onClick={() =>
-                  navigator.clipboard
-                    .writeText(`${location.origin}/verification/${proof.shareToken}`)
-                    .then(() => setCopied(true))
-                    .catch(() =>
-                      setError('Copie indisponible. Sélectionnez le lien pour le copier.'),
-                    )
-                }
+      <details>
+        <summary>Contrôles techniques, provenance et horodatage</summary>
+        <section className="capture-evidence" aria-label="Attestation technique">
+          {proof.manifest.certification && (
+            <section aria-label="Processus de certification">
+              <h3>Certification photo / vidéo · protection contre les falsifications</h3>
+              <p
+                className={`provenance-label ${proof.manifest.certification.status === 'review_required' ? 'signal' : ''}`}
               >
-                {copied ? <Check size={17} /> : <Copy size={17} />}
-              </button>
-            </div>
-            <div className="button-row">
-              <a
-                className="text-link"
-                href={`/verification/${proof.shareToken}`}
-                target="_blank"
-                rel="noreferrer"
-              >
-                Ouvrir la vérification <ExternalLink size={14} />
-              </a>
-              <button
-                className="text-link muted"
-                disabled={busy}
-                onClick={() =>
-                  act(async () =>
-                    onChange(
-                      await api(`/api/proofs/${proof.id}/share`, {
-                        method: 'POST',
-                        body: JSON.stringify({ enabled: false }),
-                      }),
-                    ),
-                  )
-                }
-              >
-                Révoquer le lien
-              </button>
-            </div>
-          </>
-        ) : (
-          <button
-            className="button secondary small"
-            disabled={busy}
-            onClick={() =>
+                {certificationLabels[proof.manifest.certification.status]}
+              </p>
+              <ol>
+                {proof.manifest.certification.checks.map((check) => (
+                  <li key={check.id}>
+                    <strong>
+                      {check.result === 'passed'
+                        ? 'Contrôlé'
+                        : check.result === 'review'
+                          ? 'À examiner'
+                          : 'Non établi'}
+                    </strong>{' '}
+                    — {check.detail}
+                  </li>
+                ))}
+              </ol>
+              <p>
+                {proof.manifest.certification.aiAuthenticity === 'camera_provenance_verified'
+                  ? 'Cette évaluation est incluse dans le manifeste signé. La signature de l’appareil atteste une capture matérielle ; une mise en scène ou un écran photographié restent possibles.'
+                  : 'Cette évaluation est incluse dans le manifeste signé. Aucun certificat « sans IA » n’est délivré. En présence d’indices, faites examiner l’original et son contexte avant de vous fier à la scène.'}
+              </p>
+            </section>
+          )}
+          <ChallengeReview
+            proof={proof}
+            busy={busy}
+            submit={(input) =>
               act(async () =>
                 onChange(
-                  await api(`/api/proofs/${proof.id}/share`, {
+                  await api(`/api/proofs/${proof.id}/review`, {
                     method: 'POST',
-                    body: JSON.stringify({ enabled: true }),
+                    body: JSON.stringify(input),
                   }),
                 ),
               )
             }
+          />
+          <h3>Attestation technique et protection du dossier</h3>
+          <p>
+            {proof.attestation
+              ? 'Manifeste signé par cette installation (Ed25519). Le PDF explique les contrôles ; le ZIP contient la signature et la clé publique.'
+              : 'Dossier antérieur : aucune signature technique enregistrée.'}
+          </p>
+          <p>
+            {proof.manifest.capture
+              ? `Capture engagée auprès du serveur le ${new Date(proof.manifest.capture.committedAt).toLocaleString('fr-FR')}.`
+              : 'Pas de session de capture engagée : origine uniquement déclarée.'}
+          </p>
+          <p>
+            Identité du déposant non vérifiée · réalité des faits non certifiée · aucun verdict
+            automatique sur l’IA. Les indices ne justifient pas, seuls, de rejeter une preuve.
+          </p>
+          {proof.manifest.declaration && (
+            <p>
+              Auteur déclaré : {proof.manifest.declaration.author}
+              <br />
+              {proof.manifest.declaration.context}
+            </p>
+          )}
+        </section>
+        <section className="detail-section">
+          <h3>
+            <Clock3 size={17} /> Horodatage indépendant
+          </h3>
+          {proof.receipt ? (
+            <>
+              <p>
+                Jeton RFC 3161 signé par <strong>{proof.receipt.provider}</strong>, daté du{' '}
+                {date(proof.receipt.time)}. Signature vérifiée à la réception.
+              </p>
+              <p className="muted">
+                Qualification :{' '}
+                {proof.receipt.qualification === 'operator_reviewed'
+                  ? 'service examiné par l’opérateur. La qualification eIDAS n’est pas validée automatiquement.'
+                  : 'non évaluée.'}
+              </p>
+            </>
+          ) : (
+            <>
+              <p>
+                Aucun jeton indépendant obtenu. La date du dépôt n’est pas un horodatage qualifié.
+              </p>
+              <button
+                className="button secondary small"
+                disabled={busy || !config.timestampConfigured}
+                onClick={() =>
+                  act(async () =>
+                    onChange(await api(`/api/proofs/${proof.id}/timestamp`, { method: 'POST' })),
+                  )
+                }
+              >
+                {busy ? <Spinner /> : <Clock3 size={15} />} Réessayer l’horodatage
+              </button>
+            </>
+          )}
+        </section>
+        <section className="detail-section">
+          <h3>
+            <Sparkles size={17} /> Provenance & indices IA
+          </h3>
+          <span
+            className={`provenance-label ${proof.manifest.provenance.signals.length ? 'signal' : ''}`}
           >
-            <Link2 size={15} /> Activer un lien de vérification
-          </button>
-        )}
-      </section>
+            {proof.manifest.provenance.signals.length
+              ? 'Indices déclaratifs présents'
+              : 'Résultat inconclusif'}
+          </span>
+          {proof.manifest.provenance.signals.length > 0 && (
+            <ul>
+              {proof.manifest.provenance.signals.map((s) => (
+                <li key={s}>{s}</li>
+              ))}
+            </ul>
+          )}
+          <p>{proof.manifest.provenance.explanation}</p>
+          <ContentCredentialsSummary proof={proof} />
+        </section>
+      </details>
+      <details>
+        <summary>Protection des copies</summary>
+        <ProtectionPanel
+          proof={proof}
+          onChange={async () => onChange(await api<Proof>(`/api/proofs/${proof.id}`))}
+        />
+      </details>
+      <details>
+        <summary>Lien de vérification des empreintes</summary>
+        <section className="detail-section">
+          <h3>
+            <Link2 size={17} /> Partage de vérification
+          </h3>
+          <p>
+            Le lien révèle les empreintes et le statut d’horodatage, sans exposer la photo ni sa
+            description. Toute personne ayant ce lien peut le consulter.
+          </p>
+          {proof.shareToken ? (
+            <>
+              <div className="share-url">
+                <code>
+                  {location.origin}/verification/{proof.shareToken}
+                </code>
+                <button
+                  className="icon-button"
+                  aria-label="Copier le lien"
+                  onClick={() =>
+                    navigator.clipboard
+                      .writeText(`${location.origin}/verification/${proof.shareToken}`)
+                      .then(() => setCopied(true))
+                      .catch(() =>
+                        setError('Copie indisponible. Sélectionnez le lien pour le copier.'),
+                      )
+                  }
+                >
+                  {copied ? <Check size={17} /> : <Copy size={17} />}
+                </button>
+              </div>
+              <div className="button-row">
+                <a
+                  className="text-link"
+                  href={`/verification/${proof.shareToken}`}
+                  target="_blank"
+                  rel="noreferrer"
+                >
+                  Ouvrir la vérification <ExternalLink size={14} />
+                </a>
+                <button
+                  className="text-link muted"
+                  disabled={busy}
+                  onClick={() =>
+                    act(async () =>
+                      onChange(
+                        await api(`/api/proofs/${proof.id}/share`, {
+                          method: 'POST',
+                          body: JSON.stringify({ enabled: false }),
+                        }),
+                      ),
+                    )
+                  }
+                >
+                  Révoquer le lien
+                </button>
+              </div>
+            </>
+          ) : (
+            <button
+              className="button secondary small"
+              disabled={busy}
+              onClick={() =>
+                act(async () =>
+                  onChange(
+                    await api(`/api/proofs/${proof.id}/share`, {
+                      method: 'POST',
+                      body: JSON.stringify({ enabled: true }),
+                    }),
+                  ),
+                )
+              }
+            >
+              <Link2 size={15} /> Activer un lien de vérification
+            </button>
+          )}
+        </section>
+      </details>
       <details className="event-list">
         <summary>Historique du dossier</summary>
         {proof.events.map((event, index) => (
@@ -1251,6 +1264,11 @@ function ProofDetail({
         <p>Historique applicatif ; ne constitue pas un journal d’audit indépendant.</p>
       </details>
       {error && <Notice danger>{error}</Notice>}
+      <h2 id="export">Export</h2>
+      <p>
+        Le dossier complet contient l’original et ses métadonnées. Pour limiter les informations
+        accessibles, utilisez la préparation Premium ci-dessous.
+      </p>
       <div className="detail-downloads">
         <a className="button primary" href={`/api/proofs/${proof.id}/export`}>
           <ArrowDownToLine size={17} /> Dossier complet (.zip)
@@ -1259,15 +1277,14 @@ function ProofDetail({
           <FileCheck2 size={17} /> Rapport PDF
         </a>
       </div>
-      <details className="proof-partners">
-        <summary>Faire constater les faits avec un partenaire Preuvix</summary>
-        <PartnerDirectory />
-      </details>
+      <p>
+        <a href="/annuaire">Consulter l’annuaire dans une page séparée</a>
+      </p>
       {deleting ? (
         <div className="delete-panel">
           <h3>Supprimer définitivement ce dossier ?</h3>
           <p>
-            L’original, les métadonnées, le jeton et le lien seront supprimés de cette installation.
+            L’original, les métadonnées, le jeton, les liens et les préparations contenant cette pièce seront supprimés de cette installation.
             Les exports et sauvegardes externes ne sont pas rappelés.
           </p>
           <label htmlFor="delete-confirm">Tapez SUPPRIMER pour confirmer</label>
@@ -1300,7 +1317,11 @@ function ProofDetail({
           <Trash2 size={14} /> Supprimer ce dossier
         </button>
       )}
-    </Modal>
+      <section id="transmission">
+        <PremiumCard enabled={config.premiumTransmissionTest} onOpen={onTransmission} />
+        <RecipientLinks proof={proof} onChange={onChange} />
+      </section>
+    </article>
   );
 }
 
@@ -1541,7 +1562,7 @@ function About({ config }: { config: AppConfig }) {
         </article>
       </div>
       <section className="about-legal">
-        <h2>Avant une ouverture au public en France</h2>
+        <h2>Les limites du prototype privé</h2>
         <p>
           Cette installation est un pilote pour un seul propriétaire. Elle ne remplace pas un
           constat de commissaire de justice et ne garantit pas la recevabilité d’une pièce.
@@ -1556,6 +1577,8 @@ function About({ config }: { config: AppConfig }) {
           suivi publicitaire n’est intégré ; un cookie de session de 12 heures sert à la connexion.
         </p>
         <div className="reference-links">
+          <a href="/comprendre#premium">Comprendre la préparation Premium</a>
+          <a href="/annuaire">Consulter l’annuaire séparément</a>
           <a
             href="https://www.legifrance.gouv.fr/codes/article_lc/LEGIARTI000032042461"
             target="_blank"

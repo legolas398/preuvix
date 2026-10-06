@@ -13,11 +13,11 @@ const sections = [
   ],
   [
     'Free, Premium et commissaire de justice',
-    'L’application Free est gratuite sur votre installation. Premium est proposé à 10,99 € par mois en euros, lorsque la facturation est activée ; le montant, les taxes applicables et les conditions sont présentés dans Stripe avant confirmation. Le mode test ne donne lieu à aucun encaissement réel. L’abonnement porte sur la capacité logicielle de dépôt de cette installation, sans fourniture d’hébergement ni de disque. Il est renouvelé mensuellement tant qu’il n’est pas résilié selon les modalités proposées dans le portail Stripe. Les frais d’hébergement, d’horodatage externe et de constat professionnel restent distincts. Le lien vers l’annuaire est accessible à tous ; toute mission de constat se convient directement avec le professionnel, selon son devis. Preuvix ne réserve ni ne transmet automatiquement votre dossier.',
+    'Ce prototype privé permet de conserver, vérifier et exporter des dossiers. La préparation Premium est une offre en préparation, accessible uniquement avec un statut de test activé côté serveur. Aucun paiement ni envoi professionnel n’est activé. Les éventuels honoraires du commissaire sont distincts de l’option PREUVIX et se conviennent directement avec lui. Aucun constat automatique, acceptation de mission ou garantie juridique n’est promis.',
   ],
   [
     'Données personnelles et partage',
-    'Les fichiers déposés, leur contexte et leurs métadonnées sont enregistrés sur le serveur de cette installation. La comparaison locale d’une copie se déroule dans le navigateur sans envoi de ce fichier. Vérifiez les informations de vérification avant de diffuser un lien ; un export contient l’original et ses éventuelles métadonnées personnelles. Si un service d’horodatage est configuré, l’empreinte du manifeste lui est transmise. La facturation communique un identifiant d’installation à Stripe et conserve des identifiants de client et d’état d’abonnement. Les données de paiement sont saisies chez Stripe ; les fichiers de preuve ne lui sont pas transmis.',
+    'Les fichiers déposés, leur contexte et leurs métadonnées sont enregistrés sur le serveur de cette installation. La comparaison locale d’une copie se déroule dans le navigateur sans envoi de ce fichier. Vérifiez les informations de vérification avant de diffuser un lien ; un export contient l’original et ses éventuelles métadonnées personnelles. Si un service d’horodatage est configuré, l’empreinte du manifeste lui est transmise. La facturation est désactivée dans ce prototype. Les liens de préparation donnent accès uniquement aux éléments confirmés ; leur porteur n’est pas authentifié par son nom.',
   ],
   [
     'Conservation, export et suppression',

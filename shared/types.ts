@@ -96,6 +96,8 @@ export type PublicProof = {
 };
 
 export type AppConfig = {
+  premiumTransmissionTest: boolean;
+  privatePrototype: boolean;
   authenticated: boolean;
   timestampConfigured: boolean;
   providerName: string | null;

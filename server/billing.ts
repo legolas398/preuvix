@@ -27,7 +27,9 @@ export class BillingError extends Error {
 }
 export function createBilling(config: Config, store: Store, client?: Stripe) {
   const settings = config.stripe;
-  const enabled = Boolean(settings.secretKey && settings.webhookSecret && settings.priceId);
+  const enabled =
+    !config.privatePrototype &&
+    Boolean(settings.secretKey && settings.webhookSecret && settings.priceId);
   const stripe =
     client ??
     (enabled ? new Stripe(settings.secretKey, { maxNetworkRetries: 2, timeout: 15000 }) : null);

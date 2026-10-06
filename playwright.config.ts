@@ -16,6 +16,8 @@ export default defineConfig({
     timeout: 120000,
     reuseExistingServer: false,
     env: {
+      PRIVATE_PROTOTYPE: 'true',
+      PREMIUM_TRANSMISSION_TEST: process.env.PREUVIX_TEST_PREMIUM === 'true' ? 'true' : 'false',
       OWNER_PASSWORD: 'browser-test-password-only',
       APP_ORIGIN: 'http://localhost:3011',
       PORT: '3011',

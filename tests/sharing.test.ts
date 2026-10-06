@@ -1,9 +1,9 @@
 import { test, after } from 'node:test';
 import assert from 'node:assert/strict';
-import { existsSync, mkdtempSync, rmSync } from 'node:fs';
+import { existsSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
-import { randomUUID } from 'node:crypto';
+import { generateKeyPairSync, randomBytes, randomUUID } from 'node:crypto';
 import request from 'supertest';
 import sharp from 'sharp';
 import { Store } from '../server/store';
@@ -25,6 +25,11 @@ const binary = (req: request.Test) =>
 
 async function setup(env: Record<string, string> = {}) {
   const directory = mkdtempSync(path.join(tmpdir(), 'preuvix-share-'));
+  writeFileSync(
+    path.join(directory, 'attestation-ed25519.pem'),
+    generateKeyPairSync('ed25519').privateKey.export({ type: 'pkcs8', format: 'pem' }),
+    { mode: 0o600 },
+  );
   const store = new Store(directory);
   cleanup.push(() => {
     store.close();
@@ -76,15 +81,15 @@ test('recipient links give read-only access, count views, expire and can be revo
     .post(`/api/proofs/${proof.id}/recipient-links`)
     .set('Origin', origin)
     .send({ label: 'Étude', days: 12 })
-    .expect(400);
-  const created = (
-    await owner
-      .post(`/api/proofs/${proof.id}/recipient-links`)
-      .set('Origin', origin)
-      .send({ label: 'Étude Dupont', days: 7 })
-      .expect(201)
-  ).body;
-  const token = created.url.match(/\/dossier\/([a-f0-9]{64})$/)[1];
+    .expect(403);
+  // Existing legacy links are seeded directly; creation now requires the scoped wizard.
+  const token = randomBytes(32).toString('hex');
+  store.addRecipientLink(proof.id, {
+    id: randomUUID(),
+    tokenHash: hash(token),
+    label: 'Étude Dupont',
+    expiresAt: new Date(Date.now() + 86400000).toISOString(),
+  });
   // Only the hash is stored.
   assert.equal(
     (
@@ -118,14 +123,13 @@ test('recipient links give read-only access, count views, expire and can be revo
   await visitor.get(`/api/dossier/${token}`).expect(404);
   await visitor.get(`/api/dossier/${token}/original`).expect(404);
   // Expired links stop working.
-  const second = (
-    await owner
-      .post(`/api/proofs/${proof.id}/recipient-links`)
-      .set('Origin', origin)
-      .send({ label: 'Étude Martin', days: 30 })
-      .expect(201)
-  ).body;
-  const secondToken = second.url.split('/').pop();
+  const secondToken = randomBytes(32).toString('hex');
+  store.addRecipientLink(proof.id, {
+    id: randomUUID(),
+    tokenHash: hash(secondToken),
+    label: 'Étude Martin',
+    expiresAt: new Date(Date.now() + 86400000).toISOString(),
+  });
   store.db
     .prepare('UPDATE recipient_links SET expires_at=? WHERE token_hash=?')
     .run(new Date(Date.now() - 1000).toISOString(), hash(secondToken));

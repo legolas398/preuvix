@@ -64,7 +64,7 @@ export default function RecipientPage({ token }: { token: string }) {
           <>
             <h1>{manifest.title}</h1>
             <p>
-              {shortId(proof.id)} · déposé le {date(manifest.receivedAt)} · transmis à{' '}
+              {shortId(proof.id)} · déposé le {date(manifest.receivedAt)} · étiquette destinataire :{' '}
               <strong>{dossier.label}</strong> · accessible jusqu’au {date(dossier.expiresAt)}
             </p>
             <div className="recipient-media">

@@ -1,9 +1,9 @@
 import { test, after } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, rmSync } from 'node:fs';
+import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
-import { randomUUID } from 'node:crypto';
+import { generateKeyPairSync, randomUUID } from 'node:crypto';
 import request from 'supertest';
 import Stripe from 'stripe';
 import sharp from 'sharp';
@@ -19,7 +19,13 @@ const secret = 'whsec_fixture';
 const sdk = new Stripe('sk_test_fixture');
 function fixture(enabled = true) {
   const directory = mkdtempSync(path.join(tmpdir(), 'preuvix-billing-'));
+  writeFileSync(
+    path.join(directory, 'attestation-ed25519.pem'),
+    generateKeyPairSync('ed25519').privateKey.export({ type: 'pkcs8', format: 'pem' }),
+    { mode: 0o600 },
+  );
   const config = readConfig({
+    PRIVATE_PROTOTYPE: 'false', // Existing billing unit tests use a mocked Stripe client, never real payments.
     OWNER_PASSWORD: password,
     APP_ORIGIN: origin,
     DATA_DIR: directory,

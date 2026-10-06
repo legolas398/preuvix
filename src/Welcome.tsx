@@ -13,10 +13,6 @@ import {
 } from 'lucide-react';
 import ProofDemo from './ProofDemo';
 import WelcomeBackdrop from './WelcomeBackdrop';
-import Terms from './Terms';
-import PartnerDirectory from './PartnerDirectory';
-import CommunitySpaces from './CommunitySpaces';
-import BillingPanel from './BillingPanel';
 import './welcome.css';
 
 import { useTheme, ThemePicker, type Theme } from './Theme';
@@ -71,7 +67,7 @@ const rights = [
     label: 'Preuve électronique',
   },
 ];
-function RightsExplorer() {
+export function RightsExplorer() {
   const [selected, setSelected] = useState(0);
   const right = rights[selected];
   return (
@@ -127,9 +123,9 @@ export default function Welcome({ children }: { children: ReactNode }) {
         <Wordmark />
         <nav aria-label="Navigation d’accueil">
           <a href="#comprendre">Comment ça marche</a>
-          <a href="#droits">Vos droits</a>
+          <a href="/comprendre">Comprendre PREUVIX</a>
           <a href="#offres">Nos offres</a>
-          <a href="#communaute">Communauté</a>
+          <a href="#faq">Questions fréquentes</a>
         </nav>
         <a className="welcome-login" href="#connexion">
           Mon espace <ArrowUpRight size={16} />
@@ -145,18 +141,17 @@ export default function Welcome({ children }: { children: ReactNode }) {
               <span className="live-dot" /> LA PREUVE, À LA PORTÉE DE CHACUN
             </span>
             <h1>
-              Vos droits méritent
+              Vos photos, vos références,
               <br />
-              des <em>preuves.</em>
+              un <em>dossier clair.</em>
             </h1>
             <p>
-              Un désaccord, un imprévu, un moment qui compte.
-              <br className="desktop-break" /> Conservez les faits aujourd’hui pour faire entendre
-              <br className="desktop-break" /> votre voix demain.
+              Conservez une photo, comparez son empreinte et exportez son dossier depuis votre
+              espace privé.
             </p>
             <div className="hero-actions">
               <a className="welcome-button solid" href="#connexion">
-                Commencer gratuitement <ArrowRight size={18} />
+                Ouvrir mon espace <ArrowRight size={18} />
               </a>
               <a className="welcome-button subtle" href="#comprendre">
                 Explorer la démo <ArrowDown size={17} />
@@ -222,192 +217,83 @@ export default function Welcome({ children }: { children: ReactNode }) {
         <div className="welcome-toolbar">
           <span>Un espace à votre image.</span>
           <ThemePicker />
-          <a href="#droits">
-            La technologie au service de vos droits <ArrowDown size={14} />
+          <a href="/comprendre">
+            Comprendre PREUVIX <ArrowDown size={14} />
           </a>
         </div>
-        <section className="welcome-section" id="comprendre">
-          <div className="section-heading">
-            <div>
-              <span className="welcome-kicker">01 / DE LA PHOTO AU DOSSIER</span>
-              <h2>
-                La confiance se construit.
-                <br />
-                <em>Étape par étape.</em>
-              </h2>
-            </div>
-            <p>
-              Découvrez comment une photo devient un dossier dont l’intégrité peut être vérifiée.
-            </p>
-          </div>
-          <ProofDemo />
-        </section>
-        <section className="welcome-section rights-section" id="droits">
-          <div className="section-heading">
-            <div>
-              <span className="welcome-kicker">02 / CONNAÎTRE SES DROITS</span>
-              <h2>
-                La justice commence
-                <br />
-                <em>par une voix entendue.</em>
-              </h2>
-            </div>
-            <p>Six repères pour comprendre le lien entre vos droits, les faits et la preuve.</p>
-          </div>
-          <RightsExplorer />
-          <p className="rights-footnote">
-            Repères généraux, sans garantie d’admissibilité d’un dossier. L’appréciation de la
-            preuve appartient au juge ; Preuvix ne remplace pas un conseil juridique.
+        <section className="welcome-section compact-section" id="comprendre">
+          <span className="welcome-kicker">DE LA PHOTO À L’EXPORT</span>
+          <h2>Trois étapes, un dossier à retrouver.</h2>
+          <ol className="welcome-steps">
+            <li>
+              <strong>1. Choisir une photo</strong>
+              <p>Créez un dossier et conservez votre original.</p>
+            </li>
+            <li>
+              <strong>2. Vérifier sa référence</strong>
+              <p>Comparez l’empreinte de votre fichier à celle du dossier.</p>
+            </li>
+            <li>
+              <strong>3. Exporter le dossier</strong>
+              <p>Retrouvez l’original, le rapport et les éléments de vérification.</p>
+            </li>
+          </ol>
+          <p>
+            Une empreinte permet de comparer des fichiers ; elle ne certifie pas la réalité de la
+            scène.
           </p>
+          <details>
+            <summary>Voir la démonstration courte</summary>
+            <ProofDemo />
+          </details>
         </section>
-        <section className="welcome-section" id="offres">
-          <div className="section-heading">
-            <div>
-              <span className="welcome-kicker">03 / UN ACCÈS POUR CHACUN</span>
-              <h2>
-                L’essentiel, accessible.
-                <br />
-                <em>La suite, à votre rythme.</em>
-              </h2>
-            </div>
-            <p>
-              Commencez avec l’application gratuite. Découvrez Premium à 10,99 € par mois, avec
-              paiement via Stripe.
-            </p>
-          </div>
+        <section className="welcome-section compact-section" id="offres">
+          <h2>L’essentiel, puis la préparation Premium.</h2>
           <div className="plans-grid">
             <article className="plan-card">
-              <span className="plan-label">
-                <Globe2 size={20} /> FREE / GRATUIT
-              </span>
-              <h3>
-                Les premiers pas,
-                <br />
-                en toute confiance.
-              </h3>
-              <div className="plan-price">
-                0 €<span>pour l’application</span>
-              </div>
+              <span className="plan-label">FONCTIONS PRINCIPALES</span>
+              <h3>Conserver, vérifier, exporter.</h3>
+              <p>Dossiers privés, comparaison d’empreintes et export des éléments disponibles.</p>
+            </article>
+            <article className="plan-card premium-card">
+              <span className="plan-label">PREMIUM · OFFRE EN PRÉPARATION</span>
+              <h3>Préparer une transmission à un commissaire de justice</h3>
               <p>
-                Sur votre propre installation. Les frais d’hébergement et de services externes
-                restent à votre charge.
+                Sélection de pièces, résumé, contrôle de complétude et accès de consultation
+                révocable.
               </p>
-              <ul>
-                {[
-                  'Conservation de vos photos originales',
-                  'Empreinte SHA-256 et comparaison locale',
-                  'Export et partage d’un dossier vérifiable',
-                  'Accès à toutes les ambiances visuelles',
-                ].map((item) => (
-                  <li key={item}>
-                    <Check size={17} />
-                    {item}
-                  </li>
-                ))}
-              </ul>
-              <a className="welcome-button solid" href="#connexion">
-                Accéder à mon espace gratuit <ArrowRight size={17} />
+              <a className="welcome-button subtle" href="/comprendre#premium">
+                Découvrir l’option Premium <ArrowRight size={17} />
               </a>
             </article>
-            <BillingPanel />
           </div>
-          <section className="constat-section" id="constat" aria-labelledby="constat-title">
-            <div className="constat-intro">
-              <span className="welcome-kicker">
-                <Scale size={18} /> PARCOURS PREMIUM · CONSTAT PROFESSIONNEL
-              </span>
-              <h3 id="constat-title">
-                Vos preuves, entre les mains
-                <br />
-                <em>d’un commissaire de justice.</em>
-              </h3>
-              <p>
-                Besoin de faire constater une situation ? Préparez votre dossier Preuvix, puis
-                contactez un commissaire de justice pour demander un constat et un devis.
-              </p>
-              <a
-                className="welcome-button solid"
-                href="https://annuaire.commissaire-justice.fr/"
-                target="_blank"
-                rel="noopener noreferrer"
-              >
-                Trouver un commissaire de justice <ArrowUpRight size={18} />
-              </a>
-              <span className="constat-directory-note">
-                Annuaire officiel de la profession · Nouvel onglet
-              </span>
-            </div>
-            <div className="constat-process">
-              <ol>
-                <li>
-                  <span>01</span>
-                  <div>
-                    <strong>Rassemblez les éléments</strong>
-                    <p>
-                      Conservez les originaux, le contexte et la chronologie. Exportez votre dossier
-                      depuis votre espace.
-                    </p>
-                  </div>
-                </li>
-                <li>
-                  <span>02</span>
-                  <div>
-                    <strong>Échangez avec le professionnel</strong>
-                    <p>
-                      Décrivez les faits à constater. Le commissaire détermine les modalités de son
-                      intervention et vous indique ses honoraires.
-                    </p>
-                  </div>
-                </li>
-                <li>
-                  <span>03</span>
-                  <div>
-                    <strong>Obtenez un procès-verbal de constat</strong>
-                    <p>
-                      Si la mission est acceptée et réalisée, le professionnel établit le constat
-                      des faits qu’il a personnellement observés.
-                    </p>
-                  </div>
-                </li>
-              </ol>
-              <details className="constat-checklist">
-                <summary>Préparer ma demande de constat</summary>
-                <ul>
-                  <li>Les faits précis à constater et leur localisation.</li>
-                  <li>Les dates utiles, l’urgence éventuelle et les conditions d’accès.</li>
-                  <li>Vos fichiers originaux et le dossier Preuvix exporté.</li>
-                  <li>Vos coordonnées et une demande de devis avant intervention.</li>
-                </ul>
-                <a href="#connexion">
-                  Ouvrir mon espace pour préparer le dossier <ArrowRight size={15} />
-                </a>
-              </details>
-            </div>
-            <PartnerDirectory />
-            <div className="constat-boundary">
-              <ShieldCheck size={21} />
-              <p>
-                <strong>Un constat professionnel, pas une certification automatique.</strong>{' '}
-                Preuvix documente l’intégrité de vos fichiers ; un dépôt ne constitue pas un constat
-                et ne certifie pas la réalité d’une scène passée. Le commissaire reste responsable
-                de ses constatations. Ses honoraires sont distincts de l’offre Premium. Ce lien vers
-                l’annuaire est accessible dès maintenant, sans abonnement. Seules les études dont le
-                partenariat est confirmé sont affichées dans le réseau Preuvix. Aucune réservation
-                ni transmission automatique de dossier n’est effectuée.
-              </p>
-            </div>
-            <a
-              className="constat-source"
-              href="https://commissaire-justice.fr/constat-commissaire-de-justice/qui-peut-demander-un-constat/"
-              target="_blank"
-              rel="noopener noreferrer"
-            >
-              Comprendre le constat · Chambre nationale des commissaires de justice{' '}
-              <ArrowUpRight size={14} />
-            </a>
-          </section>
         </section>
-        <CommunitySpaces />
+        <section className="welcome-section compact-section simple-faq" id="faq">
+          <h2>Les questions essentielles.</h2>
+          <details>
+            <summary>Qui peut consulter mes documents ?</summary>
+            <p>
+              Votre espace est privé. Un lien de consultation n’expose que la sélection confirmée ;
+              toute personne possédant ce lien peut l’ouvrir.
+            </p>
+          </details>
+          <details>
+            <summary>Le fichier original est-il inclus dans un export ?</summary>
+            <p>
+              Le dossier complet inclut l’original. Le rapport de vérification photo et le mode
+              empreintes seules l’excluent : vous conservez et joignez alors les fichiers
+              séparément.
+            </p>
+          </details>
+          <details>
+            <summary>PREUVIX envoie-t-il le dossier à un commissaire ?</summary>
+            <p>
+              Non. Ce prototype prépare un accès sans envoi réel. L’option PREUVIX et les éventuels
+              honoraires du professionnel sont distincts.
+            </p>
+          </details>
+          <a href="/comprendre">Comprendre les contrôles et leurs limites</a>
+        </section>
         <section className="welcome-section connection-section" id="connexion">
           <div>
             <span className="welcome-kicker">À VOUS D’ÉCRIRE LA SUITE</span>
@@ -430,16 +316,15 @@ export default function Welcome({ children }: { children: ReactNode }) {
           </div>
           {children}
         </section>
-        <Terms />
       </main>
       <footer className="welcome-footer">
         <Wordmark />
         <span>La preuve au service de vos droits.</span>
-        <a href="#droits">
+        <a href="/comprendre#reperes">
           Sources & repères juridiques <ArrowUpRight size={14} />
         </a>
         <small>PREUVIX · Version pilote</small>
-        <a href="#cgu">CGU · Conditions d’utilisation</a>
+        <a href="/comprendre#cgu">CGU · Conditions d’utilisation</a>
       </footer>
     </WelcomeBackdrop>
   );

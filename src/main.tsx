@@ -9,6 +9,7 @@ import '@fontsource/syne/latin-700.css';
 import './typography.css';
 import './design.css';
 import './themes.css';
+import './journey.css';
 
 createRoot(document.getElementById('root')!).render(
   <React.StrictMode>

@@ -24,6 +24,7 @@ import { validateContentCredentials } from './c2pa';
 import { newWatermarkCode, similarity, watermarking } from './watermark';
 import { shortId } from '../shared/format';
 import { verifyPhoto } from './photo-verification';
+import { transmissionRoutes } from './transmission';
 
 export function createApp(
   config: Config,
@@ -37,6 +38,11 @@ export function createApp(
   const watermark = watermarking(config.trustmarkModelDir);
   let watermarkBusy = false;
   app.disable('x-powered-by');
+  app.use('/api/billing', (req, res, next) => {
+    if (config.privatePrototype && !['GET', 'HEAD'].includes(req.method))
+      return void res.status(403).json({ error: 'Paiement désactivé dans ce prototype privé.' });
+    next();
+  });
   app.use(
     helmet({
       contentSecurityPolicy: config.production
@@ -113,6 +119,7 @@ export function createApp(
       return void res.status(401).json({ error: 'Connectez-vous à votre espace.' });
     next();
   };
+  transmissionRoutes(app, config, store, requireAuth);
   let photoBusy = false;
   const photoUpload = multer({
     storage: multer.memoryStorage(),
@@ -185,6 +192,8 @@ export function createApp(
       : config.maxStorageMb;
     res.json({
       authenticated: isAuthenticated,
+      premiumTransmissionTest: isAuthenticated && config.premiumTransmissionTest,
+      privatePrototype: config.privatePrototype,
       timestampConfigured: config.timestampConfigured,
       providerName: config.timestampConfigured ? config.timestamp.name : null,
       qualifiedServiceReviewed:
@@ -675,37 +684,13 @@ export function createApp(
       if (result) res.json(result);
     },
   );
-  app.post('/api/proofs/:id/recipient-links', (req, res) => {
-    const row = store.get(req.params.id);
-    if (!row) return void res.status(404).json({ error: 'Dossier introuvable.' });
-    const parsed = z
-      .object({
-        label: z.string().trim().min(2).max(120),
-        days: z.union([z.literal(7), z.literal(30), z.literal(90)]),
-      })
-      .strict()
-      .safeParse(req.body);
-    if (!parsed.success)
-      return void res.status(400).json({ error: 'Destinataire ou durée de validité invalide.' });
-    const active = store
-      .recipientLinks(row.id)
-      .filter((link) => !link.revokedAt && Date.parse(link.expiresAt) > Date.now());
-    if (active.length >= 20)
-      return void res
-        .status(409)
-        .json({ error: 'Vingt liens sont déjà actifs. Révoquez-en un avant d’en créer un autre.' });
-    // Only the hash is stored: the link is shown once, at creation.
-    const token = randomBytes(32).toString('hex');
-    store.addRecipientLink(row.id, {
-      id: randomUUID(),
-      tokenHash: hash(token),
-      label: parsed.data.label,
-      expiresAt: new Date(Date.now() + parsed.data.days * 24 * 3600_000).toISOString(),
-    });
-    res.status(201).json({
-      url: `${config.origin}/dossier/${token}`,
-      proof: store.summary(store.get(row.id)!),
-    });
+  app.post('/api/proofs/:id/recipient-links', (_req, res) => {
+    res
+      .status(config.premiumTransmissionTest ? 410 : 403)
+      .json({
+        error:
+          'Utilisez la préparation Premium pour choisir précisément les informations accessibles.',
+      });
   });
   app.delete('/api/proofs/:id/recipient-links/:linkId', (req, res) => {
     const row = store.get(req.params.id);

@@ -73,11 +73,16 @@ export default function PhotoVerification({
   return (
     <section className="local-compare" aria-label="Vérifier une photo">
       <h1>Vérifier une photo</h1>
+      <ol className="journey-steps" aria-label="Parcours photo">
+        <li aria-current={!file ? 'step' : undefined}>1. Photo</li>
+        <li aria-current={file && !response ? 'step' : undefined}>2. Référence</li>
+        <li>3. Vérification</li>
+        <li aria-current={response ? 'step' : undefined}>4. Export</li>
+      </ol>
       <p>JPEG, PNG ou WebP non animé · 10 Mio · 40 mégapixels maximum.</p>
       <p>
-        La sélection reste dans le navigateur. « Vérifier » transmet les octets originaux au backend
-        local privé, en mémoire, sans service tiers et sans conservation. Aucun aperçu transformé
-        n’est utilisé.
+        « Vérifier » analyse l’original sur cette installation locale, sans le conserver ni
+        l’envoyer à un service tiers.
       </p>
       <label>
         Photo originale{' '}
@@ -163,9 +168,12 @@ export default function PhotoVerification({
             <p>
               {r.context.clock}. Métadonnées : {r.context.metadataState}.
             </p>
-            <p>Logiciel déclaré : {String(r.context.software ?? 'absent')}</p>
-            <p>Dates déclarées : {JSON.stringify(r.context.dates)}</p>
-            <p>EXIF : {JSON.stringify(r.context.exif)}</p>
+            <details>
+              <summary>Métadonnées déclarées</summary>
+              <p>Logiciel déclaré : {String(r.context.software ?? 'absent')}</p>
+              <p>Dates déclarées : {JSON.stringify(r.context.dates)}</p>
+              <p>EXIF : {JSON.stringify(r.context.exif)}</p>
+            </details>
           </section>
           <details>
             <summary>Détails techniques et limites</summary>
