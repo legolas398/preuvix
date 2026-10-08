@@ -1,5 +1,6 @@
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
+import { evidenceServiceConfig } from './evidence-services';
 
 export type Config = ReturnType<typeof readConfig>;
 
@@ -84,6 +85,7 @@ export function readConfig(env: NodeJS.ProcessEnv = process.env) {
   if (communityContact && !/^[^\s@<>"]+@[^\s@<>"]+\.[^\s@<>"]+$/.test(communityContact))
     throw new Error('Invalid COMMUNITY_CONTACT_EMAIL.');
   return {
+    evidenceServices: evidenceServiceConfig(env),
     // Local prototype only. Never derives Premium rights from browser state or billing.
     premiumTransmissionTest: !production && env.PREMIUM_TRANSMISSION_TEST === 'true',
     privatePrototype: env.PRIVATE_PROTOTYPE !== 'false',

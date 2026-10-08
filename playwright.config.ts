@@ -30,6 +30,8 @@ export default defineConfig({
       TSA_CA_FILE: '',
       TSA_POLICY_OID: '',
       TSA_SIGNER_SHA256: '',
+      ANCHOR_SERVICE_URL: '',
+      SIGNATURE_SERVICE_URL: '',
       STRIPE_SECRET_KEY: '',
       STRIPE_WEBHOOK_SECRET: '',
       STRIPE_PRICE_ID: '',

@@ -20,6 +20,26 @@ import type { Manifest } from '../shared/types';
 const origin = 'http://localhost:3000';
 const password = 'c2pa-test-password-very-long';
 
+// Change a JPEG quantization coefficient, not an arbitrary header offset that
+// may belong to an excluded C2PA APP11 segment after the signer inserts it.
+function alterImageBytes(input: Buffer) {
+  const output = Buffer.from(input);
+  let offset = 2;
+  while (offset + 4 < output.length && output[offset] === 0xff) {
+    const marker = output[offset + 1];
+    if (marker === 0xda || marker === 0xd9) break;
+    const length = output.readUInt16BE(offset + 2);
+    if (length < 2 || offset + 2 + length > output.length) break;
+    if (marker === 0xdb && length > 3) {
+      const coefficient = offset + 5;
+      output[coefficient] = output[coefficient] === 1 ? 2 : 1;
+      return output;
+    }
+    offset += 2 + length;
+  }
+  throw new Error('Fixture has no JPEG quantization table');
+}
+
 // Test CA standing in for a camera maker on the C2PA trust list.
 function testAuthority(directory: string) {
   const file = (name: string) => path.join(directory, name);
@@ -146,8 +166,7 @@ test('C2PA signatures are validated: trusted capture, unknown signer, declared A
       (await validateContentCredentials(edited, 'image/jpeg', authority.anchors)).aiDeclared,
       true,
     );
-    const alteredAi = Buffer.from(edited);
-    alteredAi[15] ^= 1;
+    const alteredAi = alterImageBytes(edited);
     assert.notEqual(
       (await verifyPhoto(alteredAi, '', authority.anchors)).ai.status,
       'declared_synthetic',
@@ -160,9 +179,7 @@ test('C2PA signatures are validated: trusted capture, unknown signer, declared A
     assert.equal(recompressed.integrity.result, 'contenu différent');
     assert.equal(recompressed.provenance.presence, 'absent');
     await assert.rejects(verifyPhoto(Buffer.from('not an image'), '', ''), /invalide/);
-    const changed = Buffer.from(camera);
-    // Change the JPEG density byte: decoding remains valid, signed bytes differ.
-    changed[15] ^= 1;
+    const changed = alterImageBytes(camera);
     const changedResult = await verifyPhoto(changed, hash(camera), authority.anchors);
     assert.equal(changedResult.integrity.result, 'contenu différent');
     assert.equal(changedResult.provenance.binding, 'invalide');

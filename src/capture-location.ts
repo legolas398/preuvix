@@ -29,6 +29,7 @@ export function readCaptureLocation(enabled: boolean): Promise<LocationSample> {
           }
           done({
             status: 'recorded',
+            source: 'browser_geolocation',
             latitude: coords.latitude,
             longitude: coords.longitude,
             accuracy: coords.accuracy,

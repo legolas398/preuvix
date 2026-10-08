@@ -1,0 +1,132 @@
+.cases-workspace {
+  max-width: 1120px;
+}
+.case-controls {
+  border: 0;
+  padding: 0;
+  min-width: 0;
+}
+.case-panel,
+.case-file,
+.case-service {
+  border: 1px solid var(--w-line, #e7cdb8);
+  background: var(--w-paper, #fffaf5);
+  border-radius: 14px;
+  padding: 22px;
+  margin: 20px 0;
+}
+.cases-workspace h2 {
+  margin: 22px 0 14px;
+  font-size: 1.35rem;
+}
+.cases-workspace h3 {
+  font-size: 1.05rem;
+  margin: 0 0 12px;
+}
+.cases-workspace p {
+  line-height: 1.65;
+  overflow-wrap: anywhere;
+}
+.cases-workspace code {
+  display: block;
+  overflow-wrap: anywhere;
+  font-size: 0.8rem;
+  line-height: 1.6;
+}
+.cases-workspace label:not(.case-check) {
+  display: grid;
+  gap: 8px;
+  margin: 16px 0;
+}
+.cases-workspace input:not([type='checkbox']),
+.cases-workspace textarea,
+.cases-workspace select {
+  width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
+  font: inherit;
+  padding: 12px;
+  border-radius: 8px;
+  border: 1px solid var(--w-line, #d9bfaa);
+  background: var(--w-paper, #fff);
+  color: inherit;
+}
+.case-check {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  line-height: 1.6;
+  margin: 20px 0;
+}
+.case-check input {
+  flex: 0 0 18px;
+  width: 18px;
+  height: 18px;
+  margin-top: 4px;
+}
+.case-statuses {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 0;
+  list-style: none;
+}
+.case-statuses li {
+  background: var(--w-soft, #f5eee7);
+  border: 1px solid var(--w-line, #eaded2);
+  padding: 6px 10px;
+  border-radius: 7px;
+  font-size: 0.78rem;
+}
+.case-services {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+}
+.case-service {
+  padding: 16px;
+  min-width: 0;
+}
+.case-muted {
+  font-size: 0.85rem;
+  color: var(--w-muted, #736254);
+}
+.case-error {
+  padding: 14px;
+  border: 1px solid #ad452e;
+  border-radius: 8px;
+  color: #8d2f20;
+}
+.case-list {
+  display: grid;
+  gap: 14px;
+  margin-top: 20px;
+}
+.case-list .case-file {
+  text-align: left;
+  color: inherit;
+  margin: 0;
+  cursor: pointer;
+}
+.case-list span {
+  display: block;
+  margin-top: 8px;
+  font-size: 0.85rem;
+}
+.case-link {
+  border-top: 1px solid var(--w-line, #eaded2);
+  padding: 14px 0;
+}
+.cases-workspace .button {
+  white-space: normal;
+}
+@media (max-width: 720px) {
+  .case-services {
+    grid-template-columns: 1fr;
+    gap: 0;
+  }
+  .case-panel,
+  .case-file {
+    padding: 16px;
+  }
+}

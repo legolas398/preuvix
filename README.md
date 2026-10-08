@@ -175,3 +175,7 @@ Le statut de partenaire correspond à un accord référencé par l’exploitant 
 `npm run test:browser` vérifie le parcours utilisateur complet dans Edge sous Windows, ou Chromium ailleurs (`npx playwright install chromium` si nécessaire). Il utilise des photos synthétiques et une base séparée dans `.tools/browser-data`. Il produit des captures desktop/mobile dans `test-results`. La comparaison est testée avec un fichier identique puis différent, sans requête POST.
 
 Ces tests ne valident pas un vrai prestataire, son statut qualifié ni les coûts. Le connecteur doit encore être testé avec le service choisi et l'image Docker validée avant production.
+
+# Dossiers multi-fichiers
+
+Création, versions immuables, contrôle SHA-256 serveur, exports PDF/JSON/ZIP et partage révocable : voir [la configuration des dossiers et prestataires](docs/dossiers-prestataires.md). Les passerelles d’ancrage et de signature restent « Non configuré » tant que leurs services et identifiants ne sont pas fournis.

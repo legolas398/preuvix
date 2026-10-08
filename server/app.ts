@@ -25,16 +25,19 @@ import { newWatermarkCode, similarity, watermarking } from './watermark';
 import { shortId } from '../shared/format';
 import { verifyPhoto } from './photo-verification';
 import { transmissionRoutes } from './transmission';
+import { createCases } from './cases';
 
 export function createApp(
   config: Config,
   store: Store,
   timestamp: TimestampService = timestampService(config),
   stripeClient?: Stripe,
+  evidenceTransport: typeof fetch = fetch,
 ) {
   const app = express();
   const billing = createBilling(config, store, stripeClient);
   const certificates = certification(store, config.dataDir);
+  const dossiers = createCases(config, store, certificates.attest, timestamp, evidenceTransport);
   const watermark = watermarking(config.trustmarkModelDir);
   let watermarkBusy = false;
   app.disable('x-powered-by');
@@ -69,6 +72,7 @@ export function createApp(
     express.raw({ type: 'application/json', limit: '1mb' }),
     billing.webhook,
   );
+  dossiers.webhooks(app);
   app.use('/api', (_req, res, next) => {
     res.setHeader('Cache-Control', 'no-store');
     next();
@@ -120,6 +124,7 @@ export function createApp(
     next();
   };
   transmissionRoutes(app, config, store, requireAuth);
+  dossiers.routes(app, requireAuth);
   let photoBusy = false;
   const photoUpload = multer({
     storage: multer.memoryStorage(),
@@ -599,6 +604,17 @@ export function createApp(
     res.json(store.summary(store.get(row.id)!));
   });
   app.delete('/api/proofs/:id', (req, res) => {
+    if (
+      store.db
+        .prepare('SELECT 1 FROM case_version_files WHERE proof_id=? LIMIT 1')
+        .get(req.params.id)
+    )
+      return void res
+        .status(409)
+        .json({
+          error:
+            'Cette preuve appartient à l’historique d’un dossier. Ses versions doivent être conservées.',
+        });
     if (busy.has(req.params.id))
       return void res
         .status(409)
@@ -685,12 +701,10 @@ export function createApp(
     },
   );
   app.post('/api/proofs/:id/recipient-links', (_req, res) => {
-    res
-      .status(config.premiumTransmissionTest ? 410 : 403)
-      .json({
-        error:
-          'Utilisez la préparation Premium pour choisir précisément les informations accessibles.',
-      });
+    res.status(config.premiumTransmissionTest ? 410 : 403).json({
+      error:
+        'Utilisez la préparation Premium pour choisir précisément les informations accessibles.',
+    });
   });
   app.delete('/api/proofs/:id/recipient-links/:linkId', (req, res) => {
     const row = store.get(req.params.id);

@@ -47,6 +47,7 @@ import Welcome, { JusticeLoading, RightsExplorer } from './Welcome';
 import PartnerDirectory from './PartnerDirectory';
 import TransmissionWorkspace, { PremiumCard, TransmissionConsultation } from './Transmission';
 import { CaptureLocation, SignatureControl } from './CaptureEvidence';
+import Cases, { CaseConsultation } from './Cases';
 import Terms from './Terms';
 import CommunitySpaces from './CommunitySpaces';
 import CapturePanel from './CapturePanel';
@@ -131,6 +132,10 @@ function Modal({
 export default function App() {
   const [config, setConfig] = useState<AppConfig | null>(null);
   const [error, setError] = useState('');
+  const dossierToken = window.location.pathname.match(
+    /^\/consultation-dossier\/([a-f0-9]{64})$/,
+  )?.[1];
+  if (dossierToken) return <CaseConsultation token={dossierToken} />;
   const token = window.location.pathname.match(/^\/verification\/([a-f0-9]{48})$/)?.[1];
   useEffect(() => {
     api<AppConfig>('/api/config')
@@ -277,7 +282,7 @@ function Workspace({ config, onLogout }: { config: AppConfig; onLogout: () => Pr
   useEffect(() => {
     window.scrollTo({ top: 0, behavior: 'instant' });
   }, []);
-  const [tab, setTab] = useState<'proofs' | 'verify' | 'about' | 'billing'>(() => {
+  const [tab, setTab] = useState<'proofs' | 'verify' | 'about' | 'billing' | 'cases'>(() => {
     try {
       if (
         window.location.hash === '#billing' ||
@@ -305,6 +310,7 @@ function Workspace({ config, onLogout }: { config: AppConfig; onLogout: () => Pr
   const [query, setQuery] = useState('');
   const [filter, setFilter] = useState('all');
   const [creating, setCreating] = useState(false);
+  const caseCapture = useRef<((proof: Proof) => Promise<void>) | null>(null);
   const [selected, setSelected] = useState<Proof | null>(null);
   const refresh = async () => {
     const data = await api<{ proofs: Proof[]; usedBytes: number }>('/api/proofs');
@@ -334,6 +340,15 @@ function Workspace({ config, onLogout }: { config: AppConfig; onLogout: () => Pr
         </div>
         <span className="nav-label">ESPACE DE TRAVAIL</span>
         <nav>
+          <button
+            className={tab === 'cases' ? 'active' : ''}
+            onClick={() => {
+              setSelected(null);
+              setTab('cases');
+            }}
+          >
+            <FolderLock size={19} /> Dossiers multi-fichiers
+          </button>
           <button
             className={tab === 'proofs' ? 'active' : ''}
             onClick={() => {
@@ -400,13 +415,15 @@ function Workspace({ config, onLogout }: { config: AppConfig; onLogout: () => Pr
           <div className="breadcrumb">
             Mon espace <ChevronRight size={14} />
             <strong>
-              {tab === 'proofs'
-                ? 'Mes dossiers'
-                : tab === 'verify'
-                  ? 'Vérification'
-                  : tab === 'billing'
-                    ? 'Préparation Premium'
-                    : 'Fonctionnement'}
+              {tab === 'cases'
+                ? 'Dossiers multi-fichiers'
+                : tab === 'proofs'
+                  ? 'Mes dossiers'
+                  : tab === 'verify'
+                    ? 'Vérification'
+                    : tab === 'billing'
+                      ? 'Préparation Premium'
+                      : 'Fonctionnement'}
             </strong>
           </div>
           <div className="private-tag">
@@ -439,6 +456,15 @@ function Workspace({ config, onLogout }: { config: AppConfig; onLogout: () => Pr
               onDelete={async () => {
                 setSelected(null);
                 await refresh();
+              }}
+            />
+          ) : tab === 'cases' ? (
+            <Cases
+              proofs={proofs}
+              refreshProofs={refresh}
+              requestCapture={(callback) => {
+                caseCapture.current = callback;
+                setCreating(true);
               }}
             />
           ) : tab === 'proofs' ? (
@@ -597,10 +623,23 @@ function Workspace({ config, onLogout }: { config: AppConfig; onLogout: () => Pr
       {creating && (
         <CreateProof
           config={config}
-          close={() => setCreating(false)}
+          close={() => {
+            setCreating(false);
+            caseCapture.current = null;
+          }}
           onCreated={async (proof) => {
             setCreating(false);
-            setSelected(proof);
+            if (caseCapture.current) {
+              const attach = caseCapture.current;
+              caseCapture.current = null;
+              try {
+                await attach(proof);
+              } catch (e) {
+                setError(
+                  `Le fichier est conservé dans vos preuves, mais son ajout au dossier a échoué : ${(e as Error).message}`,
+                );
+              }
+            } else setSelected(proof);
             await refresh();
           }}
         />
