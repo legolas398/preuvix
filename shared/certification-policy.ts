@@ -1,4 +1,5 @@
 import type { Manifest } from './types';
+import { locationDescription } from './capture';
 
 type Check = { id: string; result: 'passed' | 'review' | 'unverified'; detail: string };
 
@@ -133,6 +134,11 @@ export function assessCertification(manifest: Manifest): CertificationAssessment
           : 'Aucun défi en direct.',
       },
       c2paCheck,
+      {
+        id: 'location',
+        result: capture?.location?.start.status === 'recorded' ? 'review' : 'unverified',
+        detail: `Localisation déclarée par le navigateur : ${locationDescription(capture?.location?.start)} Le lieu réel n’est pas authentifié.`,
+      },
       {
         id: 'ai_metadata',
         result: metadataSignals ? 'review' : 'unverified',

@@ -131,7 +131,7 @@ HEIC/HEIF n'est pas décodé par ce pilote. Le formulaire et le serveur le refus
 
 ## France, données personnelles et limites
 
-L'opérateur doit compléter ses informations légales et sa politique de confidentialité avant ouverture : identité/contact, finalités, bases légales, destinataires, hébergement, prestataire TSA, conservation, droits et procédure de suppression. Le fichier original peut contenir des données personnelles de tiers ou des coordonnées GPS même si PREUVIX ne demande pas de géolocalisation. L'empreinte envoyée au prestataire n'est pas une promesse d'anonymisation.
+L'opérateur doit compléter ses informations légales et sa politique de confidentialité avant ouverture : identité/contact, finalités, bases légales, destinataires, hébergement, prestataire TSA, conservation, droits et procédure de suppression. La capture propose une géolocalisation facultative et consentie, incluse dans le dossier privé et ses exports. Le fichier original peut aussi contenir des données personnelles de tiers ou ses propres coordonnées GPS. L'empreinte envoyée au prestataire n'est pas une promesse d'anonymisation.
 
 Une suppression n'efface ni les exports détenus par d'autres, ni les sauvegardes externes, ni les éventuels journaux du prestataire. Définir une conservation adaptée au cas d'usage avec un professionnel du droit. Ne pas promettre une recevabilité automatique, une identité vérifiée, un lieu certifié ou une détection certaine d'IA.
 

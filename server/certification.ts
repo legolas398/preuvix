@@ -6,11 +6,11 @@ import {
   randomBytes,
   randomInt,
   randomUUID,
+  verify,
 } from 'node:crypto';
 import { readFileSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
-import { execFileSync } from 'node:child_process';
-import { fileURLToPath } from 'node:url';
+import { protectSigningKey } from '../scripts/protect-signing-key.mjs';
 import type { Store } from './store';
 import { hash } from './integrity';
 import type { Manifest } from '../shared/types';
@@ -38,7 +38,7 @@ const GESTURES = [
 export const CHALLENGE_MAX_SECONDS = 180;
 
 export function newChallenge(): LivenessChallenge {
-  const code = Array.from({ length: 4 }, () => CODE_ALPHABET[randomInt(CODE_ALPHABET.length)]);
+  const code = Array.from({ length: 6 }, () => CODE_ALPHABET[randomInt(CODE_ALPHABET.length)]);
   return {
     code: code.join(''),
     gesture: GESTURES[randomInt(GESTURES.length)],
@@ -69,18 +69,35 @@ export function certification(store: Store, directory: string) {
       .toString();
     try {
       writeFileSync(keyPath, generated, { mode: 0o600, flag: 'wx' });
-      if (process.platform === 'win32') {
-        execFileSync('powershell.exe', ['-NoProfile', '-File', fileURLToPath(new URL('../scripts/protect-signing-key.ps1', import.meta.url)), '-KeyPath', keyPath], { windowsHide: true, stdio: 'pipe' });
-      }
     } catch (e) {
       if ((e as NodeJS.ErrnoException).code !== 'EEXIST') throw e;
     }
     pem = readFileSync(keyPath, 'utf8');
   }
+  protectSigningKey(keyPath);
   const privateKey = createPrivateKey(pem);
   if (privateKey.asymmetricKeyType !== 'ed25519') throw new Error('Invalid attestation key.');
   const publicKey = createPublicKey(privateKey).export({ type: 'spki', format: 'pem' }).toString();
   const keyId = hash(publicKey);
+  store.db.exec(
+    'CREATE TABLE IF NOT EXISTS active_signing_key (id INTEGER PRIMARY KEY CHECK(id=1), key_id TEXT NOT NULL)',
+  );
+  const pinned = store.db.prepare('SELECT key_id FROM active_signing_key WHERE id=1').get() as
+    { key_id: string } | undefined;
+  const known = store.db.prepare('SELECT key_id FROM signing_key_history').all() as {
+    key_id: string;
+  }[];
+  if (
+    (pinned && pinned.key_id !== keyId) ||
+    (!pinned && known.length && !known.some((key) => key.key_id === keyId))
+  )
+    throw new Error(
+      'Clé de signature remplacée sans rotation autorisée. Restaurez la clé attendue.',
+    );
+  const selfTest = randomBytes(32);
+  if (!verify(null, selfTest, publicKey, sign(null, selfTest, privateKey)))
+    throw new Error('Autocontrôle Ed25519 échoué.');
+  store.db.prepare('INSERT OR IGNORE INTO active_signing_key VALUES (1,?)').run(keyId);
   store.db.prepare('INSERT OR IGNORE INTO signing_key_history VALUES (?)').run(keyId);
   // Public keys retired by scripts/rotate-key.mjs: older dossiers still verify against them.
   let retiredKeys: { keyId: string; publicKey: string; retiredAt: string }[] = [];
@@ -127,17 +144,43 @@ export function certification(store: Store, directory: string) {
     if (row.record) {
       const previous: CaptureRecord = JSON.parse(row.record);
       if (
-        ['sha256', 'kind', 'startedAt', 'endedAt'].some(
-          (key) => previous[key as keyof CaptureRecord] !== payload[key as keyof typeof payload],
+        ['sha256', 'kind', 'startedAt', 'endedAt', 'nonce', 'location'].some(
+          (key) =>
+            JSON.stringify(previous[key as keyof CaptureRecord]) !==
+            JSON.stringify(payload[key as keyof typeof payload]),
         )
       )
         throw new Error('Cette session est déjà liée à un autre contenu.');
       return previous;
     }
     const session: CaptureSession = JSON.parse(row.session);
-    if (Date.now() > Date.parse(session.expiresAt))
+    if (payload.nonce !== session.nonce) throw new Error('Défi de session incorrect.');
+    if (
+      Date.now() >
+      Math.min(
+        Date.parse(session.expiresAt),
+        Date.parse(session.issuedAt) + (session.challenge?.maxSeconds ?? 180) * 1000,
+      )
+    )
       throw new Error('Session expirée. Recommencez la capture.');
     const committedAt = new Date();
+    const start = Date.parse(payload.startedAt),
+      end = Date.parse(payload.endedAt);
+    if (
+      start < Date.parse(session.issuedAt) - 30000 ||
+      end > committedAt.getTime() + 30000 ||
+      end - start > (payload.kind === 'video' ? 65000 : 10000)
+    )
+      throw new Error('Dates de capture incohérentes avec la session.');
+    if (payload.kind === 'video' && payload.location && !payload.location.end)
+      throw new Error('Relevé de fin de vidéo manquant.');
+    for (const [sample, at] of [
+      [payload.location?.start, start],
+      [payload.location?.end, end],
+    ] as const) {
+      if (sample?.status === 'recorded' && Math.abs(Date.parse(sample.measuredAt) - at) > 30000)
+        throw new Error('Position trop ancienne ou incohérente avec la capture.');
+    }
     const record: CaptureRecord = {
       ...session,
       ...payload,

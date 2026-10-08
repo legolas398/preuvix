@@ -13,6 +13,7 @@ import type { Proof } from '../shared/types';
 import { certificationLabels } from '../shared/certification-policy';
 import { shortId } from '../shared/format';
 import { hash } from './integrity';
+import { locationDescription } from '../shared/capture';
 
 const require = createRequire(import.meta.url);
 const ffmpeg = require('ffmpeg-static') as string;
@@ -305,8 +306,7 @@ export async function makeReport(proof: Proof, origin: string, original: Buffer)
   // ── Title, status and preview ──
   const preview = await thumbnail(proof, original);
   let image: PDFImage | null = null;
-  if (preview)
-    image = await pdf.embedJpg(preview).catch(() => null); // The report stays valid without it.
+  if (preview) image = await pdf.embedJpg(preview).catch(() => null); // The report stays valid without it.
   const textWidth = image ? CONTENT - 190 : CONTENT;
   const top = doc.y;
   doc.text(manifest.title, { size: 20, font: fonts.display, width: textWidth, gap: 2 });
@@ -423,6 +423,12 @@ export async function makeReport(proof: Proof, origin: string, original: Buffer)
   // ── 2. Process ──
   doc.heading('02', 'Processus de certification');
   const capture = manifest.capture;
+  doc.field('Localisation à la prise de vue', locationDescription(capture?.location?.start));
+  if (capture?.kind === 'video')
+    doc.field('Localisation en fin de vidéo', locationDescription(capture.location?.end));
+  doc.text(
+    'Les positions sont déclarées par le navigateur et incluses dans le manifeste signé. Leur précision est annoncée par l’appareil ; le lieu réel de la scène et le GPS ne sont pas authentifiés.',
+  );
   const credentials = manifest.provenance.contentCredentials;
   const checks = Object.fromEntries(
     (certification?.checks ?? []).map((check) => [check.id, check]),
@@ -718,6 +724,7 @@ const checkTitles: Record<string, string> = {
   hash: 'Empreinte des octets originaux',
   capture: 'Session de capture',
   challenge: 'Défi en direct',
+  location: 'Localisation de la prise de vue',
   c2pa: 'Signature d’appareil C2PA',
   ai_metadata: 'Indices IA dans les métadonnées',
   physical_origin: 'Origine physique',

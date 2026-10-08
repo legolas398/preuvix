@@ -40,6 +40,7 @@ export class Store {
         BEGIN SELECT RAISE(ABORT, 'Original and manifest are immutable'); END;
       CREATE TABLE IF NOT EXISTS sessions (hash TEXT PRIMARY KEY, expires INTEGER NOT NULL);
       CREATE TABLE IF NOT EXISTS attestations (proof_id TEXT PRIMARY KEY REFERENCES proofs(id) ON DELETE CASCADE, payload TEXT NOT NULL);
+      CREATE TABLE IF NOT EXISTS signing_key_history (key_id TEXT PRIMARY KEY);
       CREATE TABLE IF NOT EXISTS watermarks (proof_id TEXT PRIMARY KEY REFERENCES proofs(id) ON DELETE CASCADE, code TEXT NOT NULL UNIQUE, created_at TEXT NOT NULL);
       CREATE TABLE IF NOT EXISTS recipient_links (
         id TEXT PRIMARY KEY, proof_id TEXT NOT NULL REFERENCES proofs(id) ON DELETE CASCADE,
@@ -59,6 +60,9 @@ export class Store {
     if (
       attestation &&
       (attestation.algorithm !== 'Ed25519' ||
+        !this.db
+          .prepare('SELECT key_id FROM signing_key_history WHERE key_id=?')
+          .get(attestation.keyId) ||
         attestation.scope !== 'manifest_bytes' ||
         attestation.manifestHash !== hash(row.manifest) ||
         attestation.keyId !== hash(attestation.publicKey) ||
@@ -77,6 +81,9 @@ export class Store {
     ).map(({ payload }) => {
       const signed: SignedReview = JSON.parse(payload);
       if (
+        !this.db
+          .prepare('SELECT key_id FROM signing_key_history WHERE key_id=?')
+          .get(signed.keyId) ||
         signed.keyId !== hash(signed.publicKey) ||
         JSON.stringify(signed.review) !== signed.payload ||
         signed.review.proofId !== row.id ||

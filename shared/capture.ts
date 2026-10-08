@@ -1,10 +1,38 @@
 import { z } from 'zod';
+export const locationSampleSchema = z.discriminatedUnion('status', [
+  z
+    .object({
+      status: z.literal('recorded'),
+      latitude: z.number().min(-90).max(90),
+      longitude: z.number().min(-180).max(180),
+      accuracy: z.number().nonnegative().max(1000000),
+      measuredAt: z.iso.datetime(),
+    })
+    .strict(),
+  z.object({ status: z.enum(['not_requested', 'denied', 'unavailable']) }).strict(),
+]);
+export type LocationSample = z.infer<typeof locationSampleSchema>;
+export function locationDescription(sample?: LocationSample): string {
+  if (!sample) return 'Non relevée (dossier antérieur ou fichier importé).';
+  if (sample.status === 'recorded')
+    return `${sample.latitude.toFixed(6)}, ${sample.longitude.toFixed(6)} · précision annoncée ± ${Math.round(sample.accuracy)} m · mesure ${sample.measuredAt}`;
+  return {
+    not_requested: 'Non demandée : localisation non activée.',
+    denied: 'Permission de localisation refusée.',
+    unavailable: 'Position indisponible ou délai dépassé.',
+  }[sample.status];
+}
 export const captureCommitSchema = z
   .object({
     sha256: z.string().regex(/^[a-f0-9]{64}$/),
     kind: z.enum(['photo', 'video']),
     startedAt: z.iso.datetime(),
     endedAt: z.iso.datetime(),
+    nonce: z.string().regex(/^[a-f0-9]{32}$/),
+    location: z
+      .object({ start: locationSampleSchema, end: locationSampleSchema.optional() })
+      .strict()
+      .optional(),
   })
   .strict()
   .refine(

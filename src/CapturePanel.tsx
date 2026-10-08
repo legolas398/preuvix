@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
-import type { CaptureSession } from '../shared/capture';
+import type { CaptureSession, LocationSample } from '../shared/capture';
+import { readCaptureLocation } from './capture-location';
 import { sha256File } from './file-hash';
 import './capture.css';
 
@@ -31,6 +32,7 @@ export default function CapturePanel({
   const [busy, setBusy] = useState(false);
   const [recording, setRecording] = useState(false);
   const [audio, setAudio] = useState(false);
+  const [locate, setLocate] = useState(false);
   const [attempt, setAttempt] = useState(0);
   const [seconds, setSeconds] = useState(0);
   const [now, setNow] = useState(() => Date.now());
@@ -96,14 +98,28 @@ export default function CapturePanel({
     const interval = setInterval(() => setSeconds((value) => value + 1), 1000);
     return () => clearInterval(interval);
   }, [recording]);
-  async function finish(file: File, kind: 'photo' | 'video', startedAt: string, endedAt: string) {
+  async function finish(
+    file: File,
+    kind: 'photo' | 'video',
+    startedAt: string,
+    endedAt: string,
+    startLocation: LocationSample,
+  ) {
     if (!session || !alive.current) return;
     setBusy(true);
     setError('');
     try {
+      const endLocation = kind === 'video' ? await readCaptureLocation(locate) : undefined;
       const sha256 = await sha256File(file);
       if (!alive.current) return;
-      await post(`/api/captures/${session.id}/commit`, { sha256, kind, startedAt, endedAt });
+      await post(`/api/captures/${session.id}/commit`, {
+        sha256,
+        kind,
+        startedAt,
+        endedAt,
+        nonce: session.nonce,
+        location: { start: startLocation, ...(endLocation ? { end: endLocation } : {}) },
+      });
       if (alive.current) onCapture(file, session.id);
     } catch (e) {
       if (alive.current)
@@ -112,9 +128,11 @@ export default function CapturePanel({
       if (alive.current) setBusy(false);
     }
   }
-  function photo() {
+  async function photo() {
     if (!video.current?.videoWidth) return;
     setBusy(true);
+    const startLocation = await readCaptureLocation(locate);
+    if (!alive.current) return;
     const startedAt = new Date().toISOString();
     const canvas = document.createElement('canvas');
     canvas.width = video.current.videoWidth;
@@ -129,6 +147,7 @@ export default function CapturePanel({
             'photo',
             startedAt,
             new Date().toISOString(),
+            startLocation,
           );
         else {
           setBusy(false);
@@ -139,7 +158,7 @@ export default function CapturePanel({
       0.95,
     );
   }
-  function startVideo() {
+  async function startVideo() {
     if (!stream.current || typeof MediaRecorder === 'undefined') {
       setError('Enregistrement vidéo non pris en charge par ce navigateur.');
       return;
@@ -152,6 +171,9 @@ export default function CapturePanel({
       return;
     }
     try {
+      setBusy(true);
+      const startLocation = await readCaptureLocation(locate);
+      if (!alive.current) return;
       const active = new MediaRecorder(stream.current, {
         mimeType: mime,
         videoBitsPerSecond: 2500000,
@@ -189,15 +211,18 @@ export default function CapturePanel({
           'video',
           startedAt,
           new Date().toISOString(),
+          startLocation,
         );
       };
       active.start(250);
       setSeconds(0);
       setRecording(true);
+      setBusy(false);
       timer.current = setTimeout(() => {
         if (active.state === 'recording') active.stop();
       }, 60000);
     } catch {
+      setBusy(false);
       setError('Impossible de démarrer la vidéo.');
     }
   }
@@ -213,6 +238,21 @@ export default function CapturePanel({
         </li>
       </ol>
       <video ref={video} autoPlay playsInline muted onLoadedData={() => setReady(true)} />
+      <label className="capture-check">
+        <input
+          type="checkbox"
+          checked={locate}
+          disabled={recording || busy}
+          onChange={(event) => setLocate(event.target.checked)}
+        />
+        Inclure la localisation de la prise de vue
+      </label>
+      <p>
+        Avec votre autorisation, la position et sa précision sont relevées à la prise de vue (au
+        début et à la fin pour une vidéo), puis incluses dans le dossier privé et ses exports. Un
+        refus ou une indisponibilité sera indiqué. Aucune localisation en arrière-plan. Ces
+        coordonnées déclarées par l’appareil ne prouvent pas le lieu réel de la scène.
+      </p>
       <label className="capture-check">
         <input
           type="checkbox"
@@ -239,7 +279,7 @@ export default function CapturePanel({
           Session ouverte : {new Date(session.issuedAt).toLocaleTimeString('fr-FR')} · défi{' '}
           <code>{session.nonce.slice(0, 12)}</code>
           <br />
-          L’engagement doit intervenir dans les 10 minutes.
+          Le serveur refuse l’engagement après expiration du défi de 3 minutes.
         </p>
       )}
       <p>
@@ -247,7 +287,15 @@ export default function CapturePanel({
         possibles ; ce protocole ne certifie pas « sans IA ».
       </p>
       {recording && <p role="status">Enregistrement · {seconds} / 60 s</p>}
-      {busy && <p role="status">Calcul SHA-256 et engagement serveur…</p>}
+      {!recording && remaining > 0 && remaining < 75 && (
+        <p>
+          Moins de 75 secondes restantes : recommencez la session pour filmer avec le temps
+          nécessaire à l’engagement.
+        </p>
+      )}
+      {busy && (
+        <p role="status">Relevé de position si autorisé, calcul SHA-256 et engagement serveur…</p>
+      )}
       {error && <p role="alert">{error}</p>}
       <div className="button-row">
         <button className="button secondary" onClick={close}>
@@ -257,14 +305,14 @@ export default function CapturePanel({
           <>
             <button
               className="button primary"
-              disabled={!ready || !session || busy || !!error}
+              disabled={!ready || !session || busy || !!error || remaining === 0}
               onClick={photo}
             >
               Prendre la photo
             </button>
             <button
               className="button primary"
-              disabled={!ready || !session || busy || !!error}
+              disabled={!ready || !session || busy || !!error || remaining < 75}
               onClick={startVideo}
             >
               Filmer une vidéo
@@ -276,7 +324,7 @@ export default function CapturePanel({
             Terminer la vidéo
           </button>
         )}
-        {(error || (session?.challenge && remaining === 0)) && (
+        {(error || (session?.challenge && remaining < 75)) && (
           <button
             className="button secondary"
             disabled={busy || recording}

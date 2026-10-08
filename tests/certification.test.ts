@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { mkdtempSync, rmSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
-import { randomUUID, verify } from 'node:crypto';
+import { randomUUID, verify, generateKeyPairSync, sign } from 'node:crypto';
 import request from 'supertest';
 import sharp from 'sharp';
 import { createRequire } from 'node:module';
@@ -17,9 +17,17 @@ import { inspectMedia } from '../server/media';
 const require = createRequire(import.meta.url);
 const origin = 'http://localhost:3000';
 const password = 'capture-test-password-very-long';
+function provisionKey(directory: string) {
+  writeFileSync(
+    path.join(directory, 'attestation-ed25519.pem'),
+    generateKeyPairSync('ed25519').privateKey.export({ type: 'pkcs8', format: 'pem' }),
+    { mode: 0o600 },
+  );
+}
 
 test('capture commitment is authenticated, immutable, session-bound and included in verifiable signed export', async () => {
   const directory = mkdtempSync(path.join(tmpdir(), 'preuvix-cert-'));
+  provisionKey(directory);
   const store = new Store(directory);
   try {
     const config = readConfig({
@@ -40,10 +48,20 @@ test('capture commitment is authenticated, immutable, session-bound and included
       .jpeg()
       .toBuffer();
     const input = {
+      nonce: session.nonce,
       sha256: hash(bytes),
       kind: 'photo',
       startedAt: new Date().toISOString(),
       endedAt: new Date().toISOString(),
+      location: {
+        start: {
+          status: 'recorded',
+          latitude: 48.8566,
+          longitude: 2.3522,
+          accuracy: 12,
+          measuredAt: new Date().toISOString(),
+        },
+      },
     };
     const other = request.agent(app);
     await other.post('/api/login').set('Origin', origin).send({ password }).expect(200);
@@ -88,11 +106,40 @@ test('capture commitment is authenticated, immutable, session-bound and included
     assert.equal(proof.receipt, null);
     assert.equal(proof.manifest.certification.policy, 'preuvix-media-v2');
     assert.equal(proof.manifest.certification.status, 'capture_challenged');
-    assert.match(proof.manifest.capture.challenge.code, /^[A-Z0-9]{4}$/);
+    assert.match(proof.manifest.capture.challenge.code, /^[A-Z0-9]{6}$/);
+    assert.deepEqual(proof.manifest.capture.location, input.location);
     assert.ok(proof.manifest.capture.elapsedSeconds <= proof.manifest.capture.challenge.maxSeconds);
     assert.equal(proof.manifest.provenance.contentCredentials.state, 'absent');
     assert.equal(proof.manifest.certification.aiAuthenticity, 'not_established');
     const original = store.get(proof.id)!;
+    const rogue = generateKeyPairSync('ed25519');
+    const roguePublic = rogue.publicKey.export({ type: 'spki', format: 'pem' }).toString();
+    store.db.prepare('UPDATE attestations SET payload=? WHERE proof_id=?').run(
+      JSON.stringify({
+        ...proof.attestation,
+        publicKey: roguePublic,
+        keyId: hash(roguePublic),
+        signature: sign(null, Buffer.from(original.manifest), rogue.privateKey).toString('base64'),
+      }),
+      proof.id,
+    );
+    assert.throws(() => store.summary(original), /integrity mismatch/);
+    store.db
+      .prepare('UPDATE attestations SET payload=? WHERE proof_id=?')
+      .run(JSON.stringify(proof.attestation), proof.id);
+    const shared = (
+      await owner
+        .post(`/api/proofs/${proof.id}/share`)
+        .set('Origin', origin)
+        .send({ enabled: true })
+        .expect(200)
+    ).body;
+    const publicPage = (
+      await request(app).get(`/api/verification/${shared.shareToken}`).expect(200)
+    ).body;
+    assert.equal('capture' in publicPage, false);
+    assert.equal('location' in publicPage, false);
+    assert.ok(!JSON.stringify(publicPage).includes('48.8566'));
     assert.ok(
       verify(
         null,
@@ -137,6 +184,10 @@ test('capture commitment is authenticated, immutable, session-bound and included
       })
       .expect(200);
     const files = unzipSync(exported.body);
+    assert.deepEqual(
+      JSON.parse(Buffer.from(files['manifest.json']).toString()).capture.location,
+      input.location,
+    );
     assert.ok(files['manifest.sig']);
     assert.ok(files['signer-public.pem']);
     assert.ok(files['rapport.pdf']);
@@ -186,6 +237,7 @@ test('capture commitment is authenticated, immutable, session-bound and included
 
 test('LAN development also accepts exact localhost origin but not other hosts or ports', async () => {
   const directory = mkdtempSync(path.join(tmpdir(), 'preuvix-origin-test-'));
+  provisionKey(directory);
   const store = new Store(directory);
   try {
     const config = readConfig({
@@ -223,6 +275,7 @@ test('LAN development also accepts exact localhost origin but not other hosts or
 
 test('video validation decodes real MP4 and WebM, preserves bytes and rejects invalid video', async () => {
   const directory = mkdtempSync(path.join(tmpdir(), 'preuvix-video-test-'));
+  provisionKey(directory);
   const store = new Store(directory);
   try {
     const config = readConfig({

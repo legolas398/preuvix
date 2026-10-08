@@ -46,6 +46,7 @@ import PhotoVerification from './PhotoVerification';
 import Welcome, { JusticeLoading, RightsExplorer } from './Welcome';
 import PartnerDirectory from './PartnerDirectory';
 import TransmissionWorkspace, { PremiumCard, TransmissionConsultation } from './Transmission';
+import { CaptureLocation, SignatureControl } from './CaptureEvidence';
 import Terms from './Terms';
 import CommunitySpaces from './CommunitySpaces';
 import CapturePanel from './CapturePanel';
@@ -840,8 +841,8 @@ function CreateProof({
             <div className="privacy-hint">
               <LockKeyhole size={15} />
               <span>
-                Privé par défaut. Aucune géolocalisation demandée. L’original peut toutefois
-                contenir ses propres métadonnées.
+                Privé par défaut. La localisation est incluse uniquement si vous l’avez activée
+                pendant la capture. L’original peut aussi contenir ses propres métadonnées.
               </span>
             </div>
             <details className="capture-declaration">
@@ -1029,6 +1030,8 @@ function ProofDetail({
         <p className="detail-description">{proof.manifest.description}</p>
       )}
       <h2 id="controle">Vérification</h2>
+      <CaptureLocation capture={proof.manifest.capture} />
+      <SignatureControl attestation={proof.attestation} />
       <div className="hash-box">
         <span>
           <Fingerprint size={16} /> EMPREINTE SHA-256 DE L’ORIGINAL
