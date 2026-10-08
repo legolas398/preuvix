@@ -6,6 +6,6 @@ La vérification affiche trois résultats : déclaration de synthèse signée et
 
 Cette analyse ne classe pas visuellement les pixels et ne mesure pas une probabilité d’IA. Des métadonnées supprimées, une photo d’un écran ou une image générée sans déclaration peuvent rester indéterminées. Les jeux de tests synthétiques vérifient les règles et la confidentialité, pas une précision de détection sur un corpus de photos réelles.
 
-L’analyse reste incluse dans Free. Premium ajoute la préparation guidée d’une transmission et les liens révocables ; il ne promet pas de meilleure authenticité. Son tarif reste à venir, sans paiement activé.
+L’analyse reste incluse dans Free. Premium ajoute la préparation guidée d’une transmission et les liens révocables ; il ne promet pas de meilleure authenticité. Son tarif prévu est de 10,99 € par mois, sans paiement activé dans le prototype.
 
 Références de format : [PNG, W3C](https://www.w3.org/TR/png-3/) et [actions C2PA](https://spec.c2pa.org/specifications/specifications/2.2/guidance/Guidance.html).

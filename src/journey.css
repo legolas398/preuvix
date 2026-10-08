@@ -13,6 +13,27 @@
   font-size: 1.35rem;
   margin: 12px 0;
 }
+.premium-benefits {
+  padding-left: 20px;
+  line-height: 1.8;
+}
+.summary-templates {
+  margin: 20px 0;
+  padding: 18px;
+  border: 1px solid var(--w-line);
+  border-radius: 12px;
+  background: var(--w-soft);
+}
+.summary-templates h3 {
+  margin-top: 0;
+}
+.summary-templates button:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+.summary-count {
+  font-size: 0.85rem;
+}
 .premium-preparation p,
 .transmission-workspace p {
   max-width: 72ch;

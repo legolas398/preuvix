@@ -251,7 +251,7 @@ export default function Welcome({ children }: { children: ReactNode }) {
         </section>
         <section className="welcome-section compact-section" id="offres">
           <span className="welcome-kicker">DEUX OFFRES, UN MÊME SOIN POUR VOS DOSSIERS</span>
-          <h2>Free pour commencer. Premium pour préparer la suite.</h2>
+          <h2>Conservez avec Free. Préparez votre dossier avec Premium.</h2>
           <div className="plans-grid">
             <article className="plan-card">
               <span className="plan-label">L’ESSENTIEL AU QUOTIDIEN</span>
@@ -281,40 +281,86 @@ export default function Welcome({ children }: { children: ReactNode }) {
                 Commencer avec Free <ArrowRight size={17} />
               </a>
             </article>
-            <article className="plan-card premium-card">
-              <span className="plan-label">POUR PRÉPARER UNE TRANSMISSION</span>
+            <article className="plan-card premium-card premium-offer">
+              <span className="plan-label">LE DOSSIER PRÊT À PRÉSENTER</span>
               <h3>Premium</h3>
               <p className="offer-price">
-                En préparation <span>· tarif à venir</span>
+                10,99 € <span>/ mois · offre en préparation</span>
               </p>
               <p>
-                Tout Free, avec une préparation guidée du dossier à présenter à un professionnel.
+                Tout Free, avec un espace de préparation pour réunir vos pièces, expliquer les faits
+                et choisir exactement ce que vous partagez.
               </p>
               <ul>
                 <li>
-                  <Check size={17} /> Sélection précise des pièces à présenter
+                  <Check size={17} /> Plusieurs pièces réunies dans une même sélection
                 </li>
                 <li>
-                  <Check size={17} /> Résumé et contrôle de complétude
+                  <Check size={17} /> Modèles de résumé : immobilier, travaux et internet
                 </li>
                 <li>
-                  <Check size={17} /> Choix des informations accessibles
+                  <Check size={17} /> Brouillons sauvegardés et contrôle de complétude
                 </li>
                 <li>
-                  <Check size={17} /> Lien de consultation avec expiration
+                  <Check size={17} /> Originaux et notes partagés seulement si vous le décidez
                 </li>
                 <li>
-                  <Check size={17} /> Révocation de l’accès à tout moment
+                  <Check size={17} /> Liens de 7, 30 ou 90 jours, révocables à tout moment
                 </li>
               </ul>
-              <a className="welcome-button subtle" href="/comprendre#premium">
+              <a className="welcome-button" href="/comprendre#premium">
                 Découvrir l’option Premium <ArrowRight size={17} />
               </a>
             </article>
           </div>
+          <div
+            className="plan-comparison"
+            role="region"
+            aria-label="Comparaison Free et Premium"
+            tabIndex={0}
+          >
+            <table>
+              <caption>Ce qui change avec Premium</caption>
+              <thead>
+                <tr>
+                  <th scope="col">Votre usage</th>
+                  <th scope="col">Free · Gratuit</th>
+                  <th scope="col">Premium · 10,99 €/mois</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <th scope="row">Conserver, vérifier et exporter</th>
+                  <td>Inclus</td>
+                  <td>Inclus</td>
+                </tr>
+                <tr>
+                  <th scope="row">Préparer plusieurs pièces ensemble</th>
+                  <td>Exports par dossier</td>
+                  <td>Sélection et résumé communs</td>
+                </tr>
+                <tr>
+                  <th scope="row">Rédiger votre demande</th>
+                  <td>Contexte libre par dossier</td>
+                  <td>3 modèles guidés et brouillons</td>
+                </tr>
+                <tr>
+                  <th scope="row">Présenter une sélection à un professionnel</th>
+                  <td>Fichiers à remettre vous-même</td>
+                  <td>Lien de consultation dédié</td>
+                </tr>
+                <tr>
+                  <th scope="row">Contrôler l’accès à cette sélection</th>
+                  <td>Pas de lien de sélection</td>
+                  <td>Choix des originaux, durée et révocation</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
           <p className="offers-note">
-            Premium est accessible en test sur invitation. Aucun paiement ni envoi automatique n’est
-            activé. Les honoraires du professionnel restent distincts.
+            Tarif prévu : 10,99 € par mois. Premium est accessible en test sur invitation. Aucun
+            paiement ni envoi automatique n’est activé. Les honoraires du professionnel restent
+            distincts.
           </p>
         </section>
         <section

@@ -52,19 +52,17 @@ test('simplified welcome has three steps, concise FAQ and separate help and dire
     page.locator('#offres').getByRole('heading', { name: 'Premium', exact: true }),
   ).toBeVisible();
   await expect(page.locator('#offres')).toContainText('Gratuit');
-  await expect(page.locator('#offres')).toContainText('tarif à venir');
+  await expect(page.locator('#offres .premium-offer')).toContainText('10,99 €');
+  await expect(page.getByRole('table')).toContainText('3 modèles guidés et brouillons');
   await expect(page.locator('.partner-map.leaflet-container')).toBeVisible();
   await expect(page.locator('.constat-section')).toHaveCount(0);
-  await expect(page.getByText('10,99', { exact: false })).toHaveCount(0);
   await page.getByRole('link', { name: 'Ouvrir mon espace', exact: true }).focus();
   await page.keyboard.press('Enter');
   await expect(page.locator('#password')).toBeInViewport();
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
   await page.screenshot({ path: 'test-results/welcome-simplified-mobile.png', fullPage: true });
   await page.goto('/comprendre');
-  await expect(
-    page.getByRole('heading', { name: 'Préparation Premium · Offre en préparation' }),
-  ).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Premium · 10,99 € par mois' })).toBeVisible();
   await page.goto('/annuaire');
   await expect(
     page.getByRole('heading', { name: 'Annuaire des commissaires de justice' }),
@@ -90,7 +88,7 @@ test('standard dossier remains usable without Premium; direct premium call denie
   expect((await download).suggestedFilename()).toMatch(/zip$/);
   await page.getByRole('button', { name: 'Découvrir l’option Premium' }).click();
   await expect(
-    page.getByRole('heading', { name: 'Offre en préparation', exact: true }),
+    page.getByRole('heading', { name: 'Premium · 10,99 € / mois', exact: true }),
   ).toBeVisible();
   await expect(page.getByRole('button', { name: 'Nouvelle préparation' })).toHaveCount(0);
   const denied = await page.request.post('/api/transmissions', {
@@ -128,6 +126,19 @@ test('premium test preparation persists, scopes access and revokes it on mobile 
   await expect(
     page.getByRole('heading', { name: 'Vérifier le résumé', exact: true }),
   ).toBeFocused();
+  await page.getByRole('button', { name: 'Immobilier', exact: true }).click();
+  await expect(page.getByLabel('Résumé accessible au destinataire')).toHaveValue(/Lieu concerné/);
+  await expect(page.getByRole('button', { name: 'Travaux', exact: true })).toBeDisabled();
+  await page.getByLabel('Résumé accessible au destinataire').fill('');
+  await page.getByRole('button', { name: 'Travaux', exact: true }).click();
+  await expect(page.getByLabel('Résumé accessible au destinataire')).toHaveValue(
+    /Désordres observés/,
+  );
+  await page.getByLabel('Résumé accessible au destinataire').fill('');
+  await page.getByRole('button', { name: 'Internet', exact: true }).click();
+  await expect(page.getByLabel('Résumé accessible au destinataire')).toHaveValue(
+    /Adresse de la page/,
+  );
   await page
     .getByLabel('Résumé accessible au destinataire')
     .fill('Préparation fictive sans envoi réel.');

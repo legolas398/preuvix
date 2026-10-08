@@ -158,7 +158,18 @@ export default function App() {
         <a href="/">← Retour à PREUVIX</a>
         <About config={config} />
         <section id="premium">
-          <h2>Préparation Premium · Offre en préparation</h2>
+          <h2>Premium · 10,99 € par mois</h2>
+          <p>
+            Tout Free, avec une préparation guidée pour présenter plusieurs pièces ensemble. Offre
+            en préparation, accessible en test sur invitation ; aucun paiement activé.
+          </p>
+          <ul>
+            <li>Trois modèles de résumé : immobilier, travaux et internet.</li>
+            <li>Des brouillons sauvegardés pour préparer votre demande à votre rythme.</li>
+            <li>Une sélection de pièces avec résumé commun et vérification de complétude.</li>
+            <li>Le choix d’inclure ou non les originaux et les notes de contexte.</li>
+            <li>Un lien valable 7, 30 ou 90 jours, révocable depuis votre espace.</li>
+          </ul>
           <p>
             Sélectionnez des pièces, vérifiez un résumé et les informations accessibles, puis créez
             un lien révocable. Le contrôle de complétude vérifie les champs et les pièces, pas leur
@@ -1284,8 +1295,9 @@ function ProofDetail({
         <div className="delete-panel">
           <h3>Supprimer définitivement ce dossier ?</h3>
           <p>
-            L’original, les métadonnées, le jeton, les liens et les préparations contenant cette pièce seront supprimés de cette installation.
-            Les exports et sauvegardes externes ne sont pas rappelés.
+            L’original, les métadonnées, le jeton, les liens et les préparations contenant cette
+            pièce seront supprimés de cette installation. Les exports et sauvegardes externes ne
+            sont pas rappelés.
           </p>
           <label htmlFor="delete-confirm">Tapez SUPPRIMER pour confirmer</label>
           <input

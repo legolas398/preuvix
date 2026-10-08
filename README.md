@@ -146,7 +146,7 @@ Références primaires :
 
 L’accueil présente les deux offres **Free** et **Premium**, ainsi que la carte interactive des commissaires de justice. Free comprend les vérifications d’intégrité et les indices IA ; Premium ajoute la préparation guidée et les liens de consultation révocables. Les méthodes, résultats et limites de l’analyse IA sont documentés dans [Analyse des indices IA](docs/analyse-ia.md).
 
-Offre en préparation, sans prix proposé dans ce prototype. L’accès de test permet une préparation avec sélection explicite et lien révocable ; il ne dépend pas d’un paiement. Les éventuels honoraires du commissaire sont distincts. Le module Stripe historique reste dans le code mais `PRIVATE_PROTOTYPE=true` bloque ses opérations et ses appels distants. Sa documentation historique ne définit pas l’offre actuelle.
+Offre en préparation au tarif prévu de 10,99 € par mois, sans paiement activé dans ce prototype. Premium ajoute trois modèles de résumé (immobilier, travaux et internet), des brouillons et une préparation avec sélection explicite et lien révocable. L’accès de test ne dépend pas d’un paiement. Les éventuels honoraires du commissaire sont distincts. Le module Stripe historique reste dans le code mais `PRIVATE_PROTOTYPE=true` bloque ses opérations et ses appels distants. Sa documentation historique ne définit pas l’offre actuelle.
 
 ## Répertoire des partenaires Preuvix
 

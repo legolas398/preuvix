@@ -18,7 +18,7 @@
 - Développements juridiques et techniques et communauté retirés de l’accueil principal. La carte et le répertoire sont également accessibles depuis l’accueil.
 - Annuaire intégré au dossier remplacé par un lien vers sa page dédiée.
 - Ancien formulaire « Envoyer à un commissaire » remplacé par un assistant distinct ; les anciens accès restent révocables.
-- Prix et parcours de paiement retirés des écrans du prototype. Les anciens modules de facturation restent dans le dépôt, hors du parcours actif.
+- Prix prévu affiché : 10,99 € / mois, avec comparaison Free/Premium. Le paiement reste désactivé dans le prototype. Les anciens modules de facturation restent dans le dépôt, hors du parcours actif.
 - Déclarations complémentaires repliées à la création ; contrôles détaillés repliés dans le dossier.
 
 ## Configuration serveur
@@ -35,6 +35,8 @@ Le mode prototype bloque les opérations de facturation et désactive les appels
 ## Données et états
 
 Les préparations sont stockées dans la table SQLite `transmissions`, indépendamment des preuves. « Continuer » et « Enregistrer et quitter » enregistrent les modifications. Une saisie non enregistrée est annoncée comme telle. Les droits d’écriture sont vérifiés par le serveur, de même que l’authentification, l’origine des requêtes et la révision du brouillon.
+
+L’étape résumé propose trois modèles facultatifs (immobilier, travaux, internet). Ils ne sont insérés que dans un résumé vide pour préserver toute saisie existante. Les rubriques restent à compléter par l’utilisateur ; aucun fait n’est généré. Le résumé conserve sa limite de 1 500 caractères et suit le même enregistrement que le reste du brouillon.
 
 - **Brouillon** : préparation enregistrée, éventuellement incomplète.
 - **Prêt** : au moins une pièce, un résumé et une étiquette ; références présentes et intégrité contrôlée.

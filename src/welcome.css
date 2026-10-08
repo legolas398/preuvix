@@ -961,6 +961,65 @@
 .premium-card {
   background: var(--w-soft);
 }
+.premium-offer {
+  border: 2px solid var(--w-accent);
+  background: linear-gradient(145deg, var(--w-soft), var(--w-paper));
+  box-shadow: 0 14px 40px color-mix(in srgb, var(--w-accent) 12%, transparent);
+}
+.welcome .plan-card > .offer-price {
+  font-size: clamp(28px, 4vw, 40px);
+  font-weight: 700;
+  line-height: 1.2;
+  letter-spacing: -1px;
+}
+.offer-price span {
+  display: block;
+  margin-top: 10px;
+  font-size: 12px;
+  font-weight: 400;
+  letter-spacing: 0;
+  color: var(--w-muted);
+}
+.plan-card li svg {
+  flex-shrink: 0;
+}
+.plan-comparison {
+  margin-top: 32px;
+  overflow-x: auto;
+  border: 1px solid var(--w-line);
+  border-radius: 12px;
+  background: var(--w-paper);
+}
+.plan-comparison table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+.plan-comparison caption {
+  text-align: left;
+  font-size: 18px;
+  font-weight: 700;
+  padding: 22px;
+}
+.plan-comparison th,
+.plan-comparison td {
+  text-align: left;
+  padding: 16px 20px;
+  border-top: 1px solid var(--w-line);
+  line-height: 1.5;
+  min-width: 145px;
+}
+.plan-comparison td:last-child,
+.plan-comparison thead th:last-child {
+  background: var(--w-soft);
+}
+.plan-comparison tbody th {
+  font-weight: 500;
+}
+.plan-comparison:focus-visible {
+  outline: 2px solid var(--w-accent);
+  outline-offset: 4px;
+}
 .coming-soon {
   font-size: 8px;
   margin-left: auto;

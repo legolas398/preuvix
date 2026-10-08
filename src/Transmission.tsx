@@ -17,6 +17,20 @@ const steps = [
   'Préciser le destinataire',
   'Confirmer',
 ];
+const summaryTemplates = [
+  {
+    name: 'Immobilier',
+    text: 'Lieu concerné : \nDate des observations : \nÉtat observé et différences constatées : \nPièces jointes et ce qu’elles montrent : \nObjet de ma demande : ',
+  },
+  {
+    name: 'Travaux',
+    text: 'Lieu et travaux concernés : \nDates et étapes des travaux : \nDésordres observés : \nÉchanges déjà effectués : \nPièces jointes et ce qu’elles montrent : \nObjet de ma demande : ',
+  },
+  {
+    name: 'Internet',
+    text: 'Adresse de la page ou du contenu : \nDate et heure de consultation : \nContenu observé et contexte : \nPièces jointes et ce qu’elles montrent : \nObjet de ma demande : ',
+  },
+];
 const empty: TransmissionInput = {
   proofIds: [],
   recipient: '',
@@ -30,13 +44,19 @@ export function PremiumCard({ enabled, onOpen }: { enabled: boolean; onOpen: () 
   return (
     <section className="premium-preparation" aria-label="Transmission Premium">
       <span className="eyebrow">
-        PREMIUM · {enabled ? 'ACCÈS DE TEST' : 'OFFRE EN PRÉPARATION'}
+        PREMIUM · 10,99 €/MOIS · {enabled ? 'ACCÈS DE TEST' : 'OFFRE EN PRÉPARATION'}
       </span>
       <h2>Préparer une transmission à un commissaire de justice</h2>
       <p>
         Sélectionnez les pièces, préparez un résumé et contrôlez les informations accessibles par un
         lien révocable.
       </p>
+      <ul className="premium-benefits">
+        <li>3 modèles de résumé pour structurer votre demande</li>
+        <li>Sélection de pièces et brouillons à reprendre plus tard</li>
+        <li>Accès de 7, 30 ou 90 jours, révocable à tout moment</li>
+      </ul>
+      <p>Tarif prévu. Aucun paiement activé dans le prototype.</p>
       <button className="button secondary" onClick={onOpen}>
         {enabled ? 'Préparer la transmission' : 'Découvrir l’option Premium'}
       </button>
@@ -201,15 +221,15 @@ export default function TransmissionWorkspace({
       </p>
       {!enabled && (
         <section className="premium-preparation">
-          <h2>Offre en préparation</h2>
+          <h2>Premium · 10,99 € / mois</h2>
           <p>
             La préparation organise une sélection de pièces, vérifie la présence des champs
             nécessaires et permet un lien de consultation révocable. Ce contrôle de complétude ne
             porte pas sur la valeur juridique du dossier.
           </p>
           <p>
-            L’accès de test est désactivé sur cette installation. Les accès existants restent
-            consultables et révocables.
+            Offre en préparation, sans paiement activé. L’accès de test est désactivé sur cette
+            installation. Les accès existants restent consultables et révocables.
           </p>
         </section>
       )}
@@ -275,6 +295,32 @@ export default function TransmissionWorkspace({
                   {input.proofIds.length} pièce(s) sélectionnée(s). Décrivez les éléments utiles à
                   la demande.
                 </p>
+                <div className="summary-templates">
+                  <h3>Un point de départ adapté à votre situation</h3>
+                  <p id="summary-template-help">
+                    Choisissez un modèle sur un résumé vide, puis complétez les rubriques avec vos
+                    propres observations.
+                  </p>
+                  <div className="button-row" aria-describedby="summary-template-help">
+                    {summaryTemplates.map((template) => (
+                      <button
+                        key={template.name}
+                        type="button"
+                        className="button secondary"
+                        disabled={Boolean(input.summary.trim())}
+                        onClick={() => change({ summary: template.text })}
+                      >
+                        {template.name}
+                      </button>
+                    ))}
+                  </div>
+                  {input.summary.trim() && (
+                    <p>
+                      Pour choisir un autre modèle, videz d’abord le résumé. Votre texte reste ainsi
+                      préservé.
+                    </p>
+                  )}
+                </div>
                 <label>
                   Résumé accessible au destinataire
                   <textarea
@@ -284,6 +330,10 @@ export default function TransmissionWorkspace({
                     onChange={(e) => change({ summary: e.target.value })}
                   />
                 </label>
+                <p className="summary-count">
+                  {input.summary.length} / 1 500 caractères · Relisez et complétez le résumé avant
+                  de continuer.
+                </p>
               </>
             )}
             {step === 2 && (
