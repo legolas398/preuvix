@@ -3,6 +3,7 @@ import sharp from 'sharp';
 import exifr from 'exifr';
 import type { Provenance } from '../shared/types';
 import { HEIF_MESSAGE, photoFormat } from '../shared/photo-format';
+import { aiMetadataSignals, pngText } from './ai-metadata';
 
 export const hash = (data: Uint8Array | string) => createHash('sha256').update(data).digest('hex');
 
@@ -38,23 +39,11 @@ export async function inspectImage(bytes: Buffer) {
     JSON.stringify(tags),
     metadata.xmp?.toString('utf8') || '',
     metadata.exif?.toString('utf8') || '',
-  ].join(' ');
-  const knownTools = [
-    'Midjourney',
-    'DALL-E',
-    'DALL·E',
-    'Stable Diffusion',
-    'ComfyUI',
-    'Adobe Firefly',
-    'Automatic1111',
+    ...pngText(bytes),
   ];
-  const signals = knownTools
-    .filter((tool) => text.toLowerCase().includes(tool.toLowerCase()))
-    .map((tool) => `Métadonnée mentionnant ${tool}`);
+  const signals = aiMetadataSignals(text);
   // C2PA markers are only hints here: no signature or trust validation is implied.
   const raw = bytes.toString('latin1');
-  if (raw.includes('trainedAlgorithmicMedia'))
-    signals.push('Marqueur déclaratif « trainedAlgorithmicMedia »');
   const credentialsDetected = raw.includes('c2pa') || raw.includes('C2PA');
   const provenance: Provenance = {
     result: signals.length ? 'signals_found' : 'inconclusive',

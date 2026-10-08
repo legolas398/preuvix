@@ -2,20 +2,20 @@
 
 ## Structure des écrans
 
-| Écran                               | Contenu                                                                                                                                       |
-| ----------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------- |
-| Accueil `/`                         | Promesse concrète, ouverture de l’espace, trois étapes, démonstration dépliable, fonctions principales/Premium et trois questions fréquentes. |
-| Espace privé                        | Liste ou état vide, création, recherche et filtres ; carte Premium discrète.                                                                  |
-| Dossier                             | Résumé, document, vérification, exports et préparation Premium. Contrôles avancés, protection des copies et historique dépliables.            |
-| Comprendre `/comprendre`            | Explications techniques, limites, préparation Premium, sources existantes et conditions du prototype.                                         |
-| Annuaire `/annuaire`                | Recherche indépendante du parcours de création et du droit Premium. Aucun envoi.                                                              |
-| Préparation Premium                 | Sélection → résumé → informations accessibles → étiquette destinataire/durée → récapitulatif et confirmation → lien créé et gestion.          |
-| Consultation `/consultation/:token` | Sélection figée, rapport JSON et, seulement si autorisés, originaux sélectionnés.                                                             |
+| Écran                               | Contenu                                                                                                                                                |
+| ----------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Accueil `/`                         | Promesse concrète, ouverture de l’espace, trois étapes, démonstration dépliable, offres Free/Premium, carte interactive et trois questions fréquentes. |
+| Espace privé                        | Liste ou état vide, création, recherche et filtres ; carte Premium discrète.                                                                           |
+| Dossier                             | Résumé, document, vérification, exports et préparation Premium. Contrôles avancés, protection des copies et historique dépliables.                     |
+| Comprendre `/comprendre`            | Explications techniques, limites, préparation Premium, sources existantes et conditions du prototype.                                                  |
+| Annuaire `/annuaire`                | Recherche indépendante du parcours de création et du droit Premium. Aucun envoi.                                                                       |
+| Préparation Premium                 | Sélection → résumé → informations accessibles → étiquette destinataire/durée → récapitulatif et confirmation → lien créé et gestion.                   |
+| Consultation `/consultation/:token` | Sélection figée, rapport JSON et, seulement si autorisés, originaux sélectionnés.                                                                      |
 
 ## Répétitions retirées
 
 - Grand bloc de présentation et statistiques retirés de la liste des dossiers.
-- Développements juridiques et techniques, communauté et annuaire retirés de l’accueil principal.
+- Développements juridiques et techniques et communauté retirés de l’accueil principal. La carte et le répertoire sont également accessibles depuis l’accueil.
 - Annuaire intégré au dossier remplacé par un lien vers sa page dédiée.
 - Ancien formulaire « Envoyer à un commissaire » remplacé par un assistant distinct ; les anciens accès restent révocables.
 - Prix et parcours de paiement retirés des écrans du prototype. Les anciens modules de facturation restent dans le dépôt, hors du parcours actif.

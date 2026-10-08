@@ -1,5 +1,18 @@
 import { test, expect } from '@playwright/test';
 
+test.beforeEach(async ({ page }) => {
+  // Keep map interaction checks independent of the external tile server.
+  await page.route('https://tile.openstreetmap.org/**', (route) =>
+    route.fulfill({
+      contentType: 'image/png',
+      body: Buffer.from(
+        'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jRZkAAAAASUVORK5CYII=',
+        'base64',
+      ),
+    }),
+  );
+});
+
 test('real directory locations are searchable and selectable without any Preuvix partners', async ({
   page,
 }) => {
@@ -41,7 +54,9 @@ test('office catalog failure gives a retry and recovers', async ({ page }) => {
     available ? route.continue() : route.fulfill({ status: 503, body: '' }),
   );
   await page.goto('/');
-  await expect(page.getByRole('alert')).toContainText('localisations sont indisponibles');
+  await expect(
+    page.getByRole('alert').filter({ hasText: 'localisations sont indisponibles' }),
+  ).toBeVisible({ timeout: 30000 });
   available = true;
   await page.getByRole('button', { name: 'Réessayer les localisations' }).click();
   await expect(page.locator('.office-map-results button').first()).toBeVisible();

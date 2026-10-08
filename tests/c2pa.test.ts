@@ -136,6 +136,22 @@ test('C2PA signatures are validated: trusted capture, unknown signer, declared A
     );
     assert.equal(synthetic.ai.declarations[0].validation, 'signature et liaison validées');
     assert.match(synthetic.ai.declarations[0].digitalSourceType, /trainedAlgorithmicMedia$/);
+    assert.equal(synthetic.ai.status, 'declared_synthetic');
+    const edited = await authority.sign(input, 'compositedWithTrainedAlgorithmicMedia');
+    assert.equal(
+      (await verifyPhoto(edited, '', authority.anchors)).ai.status,
+      'declared_synthetic',
+    );
+    assert.equal(
+      (await validateContentCredentials(edited, 'image/jpeg', authority.anchors)).aiDeclared,
+      true,
+    );
+    const alteredAi = Buffer.from(edited);
+    alteredAi[15] ^= 1;
+    assert.notEqual(
+      (await verifyPhoto(alteredAi, '', authority.anchors)).ai.status,
+      'declared_synthetic',
+    );
     const recompressed = await verifyPhoto(
       await sharp(camera).jpeg({ quality: 60 }).toBuffer(),
       hash(camera),

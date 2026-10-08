@@ -4,6 +4,7 @@ import exifr from 'exifr';
 import sharp from 'sharp';
 import { hash, inspectImage } from './integrity';
 import { MAX_PHOTO_BYTES } from '../shared/photo-format';
+import { isSyntheticSource } from '../shared/ai-source';
 
 const require = createRequire(import.meta.url);
 const versions = {
@@ -77,8 +78,10 @@ export async function verifyPhoto(bytes: Buffer, reference: string, anchors: str
           : 'signataire non reconnu';
       for (const assertion of active?.assertions ?? []) {
         if (!/^c2pa\.actions(?:\.v\d+)?$/.test(assertion.label)) continue;
-        const actions = (assertion.data as { actions?: unknown[] })?.actions;
-        for (const raw of actions ?? []) {
+        const actions = (assertion.data as { actions?: unknown })?.actions;
+        if (!Array.isArray(actions)) continue;
+        for (const raw of actions) {
+          if (!raw || typeof raw !== 'object') continue;
           const action = raw as { action?: string; digitalSourceType?: string };
           if (typeof action.digitalSourceType !== 'string') continue;
           declarations.push({
@@ -122,6 +125,18 @@ export async function verifyPhoto(bytes: Buffer, reference: string, anchors: str
     metadataState = 'lecture impossible — non vérifiées';
   }
   const sha256 = hash(bytes);
+  const synthetic = declarations.filter((d) => isSyntheticSource(d.digitalSourceType));
+  const signedSynthetic = synthetic.some((d) => d.validation === 'signature et liaison validées');
+  const aiStatus = signedSynthetic
+    ? 'declared_synthetic'
+    : synthetic.length || image.provenance.signals.length
+      ? 'signals_found'
+      : 'inconclusive';
+  const conclusion = signedSynthetic
+    ? 'Une déclaration C2PA liée à ce fichier indique une génération ou une retouche par IA, ou une synthèse numérique. Sa signature et sa liaison sont validées ; la confiance dans le signataire est indiquée séparément.'
+    : aiStatus === 'signals_found'
+      ? 'Des indices de génération ou de retouche IA sont présents dans les métadonnées. Ces déclarations non authentifiées peuvent être modifiées ; elles nécessitent un examen de l’original et de son contexte.'
+      : 'Aucun indice IA reconnu dans les métadonnées analysées. Résultat indéterminé : les métadonnées peuvent être absentes ou supprimées.';
   return {
     schema: 'preuvix-photo-verification/1',
     title: 'Rapport de vérification d’intégrité et de provenance',
@@ -147,9 +162,12 @@ export async function verifyPhoto(bytes: Buffer, reference: string, anchors: str
     },
     provenance,
     ai: {
+      status: aiStatus,
+      signals: image.provenance.signals,
       declarations,
-      conclusion:
-        'L’absence de déclaration C2PA ne signifie pas sans IA. Aucun détecteur visuel IA exécuté.',
+      conclusion,
+      limitation:
+        'Cette analyse porte sur les métadonnées et les déclarations C2PA. Aucun détecteur visuel IA exécuté ; aucun résultat ne certifie « sans IA ».',
     },
     context: {
       checkedAt: new Date().toISOString(),

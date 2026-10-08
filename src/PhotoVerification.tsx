@@ -156,7 +156,22 @@ export default function PhotoVerification({
           </section>
           <section>
             <h2>Informations relatives à l’IA</h2>
+            <strong className={`ai-assessment ${r.ai.status}`}>
+              {r.ai.status === 'declared_synthetic'
+                ? 'IA ou synthèse déclarée · signature validée'
+                : r.ai.status === 'signals_found'
+                  ? 'Indices IA à examiner'
+                  : 'Origine IA indéterminée'}
+            </strong>
             <p>{r.ai.conclusion}</p>
+            {r.ai.signals.length > 0 && (
+              <ul>
+                {r.ai.signals.map((signal) => (
+                  <li key={signal}>{signal}</li>
+                ))}
+              </ul>
+            )}
+            <p>{r.ai.limitation}</p>
             {r.ai.declarations.map((d, i) => (
               <p key={i}>
                 {d.digitalSourceType} — {d.action} — source {d.source} — {d.validation}

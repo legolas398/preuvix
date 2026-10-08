@@ -1,13 +1,6 @@
 import { Reader, Context } from '@contentauth/c2pa-node';
 import type { ContentCredentials } from '../shared/types';
-
-// IPTC digital source types that declare synthetic or AI-generated content.
-const SYNTHETIC_SOURCES = [
-  'trainedAlgorithmicMedia',
-  'compositeWithTrainedAlgorithmicMedia',
-  'algorithmicMedia',
-  'compositeSynthetic',
-];
+import { isSyntheticSource } from '../shared/ai-source';
 const SUPPORTED = ['image/jpeg', 'image/png', 'image/webp', 'video/mp4'];
 const UNTRUSTED = 'signingCredential.untrusted';
 
@@ -66,9 +59,24 @@ export async function validateContentCredentials(
     : store.validation_state === 'Trusted' && trustAnchors
       ? 'trusted'
       : 'valid_untrusted';
-  const text = JSON.stringify(active);
+  const sources: string[] = [];
+  for (const assertion of active.assertions ?? []) {
+    if (!/^c2pa\.actions(?:\.v\d+)?$/.test(assertion.label)) continue;
+    const actions = (assertion.data as { actions?: unknown })?.actions;
+    if (!Array.isArray(actions)) continue;
+    for (const action of actions) {
+      if (action && typeof action.digitalSourceType === 'string')
+        sources.push(action.digitalSourceType);
+    }
+  }
   const digitalSourceTypes = [
-    ...new Set([...text.matchAll(/digitalsourcetype\/([A-Za-z]+)/gi)].map((match) => match[1])),
+    ...new Set(
+      sources
+        .filter((source) =>
+          /^https?:\/\/cv\.iptc\.org\/newscodes\/digitalsourcetype\/[A-Za-z]+$/.test(source),
+        )
+        .map((source) => source.slice(source.lastIndexOf('/') + 1)),
+    ),
   ];
   const signature = active.signature_info;
   const generator =
@@ -88,7 +96,7 @@ export async function validateContentCredentials(
       : null,
     claimGenerator: generator ? String(generator).slice(0, 200) : null,
     digitalSourceTypes,
-    aiDeclared: digitalSourceTypes.some((type) => SYNTHETIC_SOURCES.includes(type)),
+    aiDeclared: sources.some(isSyntheticSource),
     failures: failures.slice(0, 20),
   };
 }

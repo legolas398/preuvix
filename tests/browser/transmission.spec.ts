@@ -44,6 +44,16 @@ test('simplified welcome has three steps, concise FAQ and separate help and dire
   await expect(page.getByRole('heading', { name: /Vos photos, vos références/ })).toBeVisible();
   await expect(page.locator('.welcome-steps > li')).toHaveCount(3);
   await expect(page.locator('#faq details')).toHaveCount(3);
+  await expect(page.locator('#offres .plan-card')).toHaveCount(2);
+  await expect(
+    page.locator('#offres').getByRole('heading', { name: 'Free', exact: true }),
+  ).toBeVisible();
+  await expect(
+    page.locator('#offres').getByRole('heading', { name: 'Premium', exact: true }),
+  ).toBeVisible();
+  await expect(page.locator('#offres')).toContainText('Gratuit');
+  await expect(page.locator('#offres')).toContainText('tarif à venir');
+  await expect(page.locator('.partner-map.leaflet-container')).toBeVisible();
   await expect(page.locator('.constat-section')).toHaveCount(0);
   await expect(page.getByText('10,99', { exact: false })).toHaveCount(0);
   await page.getByRole('link', { name: 'Ouvrir mon espace', exact: true }).focus();

@@ -13,6 +13,7 @@ import {
 } from 'lucide-react';
 import ProofDemo from './ProofDemo';
 import WelcomeBackdrop from './WelcomeBackdrop';
+import PartnerDirectory from './PartnerDirectory';
 import './welcome.css';
 
 import { useTheme, ThemePicker, type Theme } from './Theme';
@@ -125,6 +126,7 @@ export default function Welcome({ children }: { children: ReactNode }) {
           <a href="#comprendre">Comment ça marche</a>
           <a href="/comprendre">Comprendre PREUVIX</a>
           <a href="#offres">Nos offres</a>
+          <a href="#commissaires">La carte</a>
           <a href="#faq">Questions fréquentes</a>
         </nav>
         <a className="welcome-login" href="#connexion">
@@ -248,25 +250,78 @@ export default function Welcome({ children }: { children: ReactNode }) {
           </details>
         </section>
         <section className="welcome-section compact-section" id="offres">
-          <h2>L’essentiel, puis la préparation Premium.</h2>
+          <span className="welcome-kicker">DEUX OFFRES, UN MÊME SOIN POUR VOS DOSSIERS</span>
+          <h2>Free pour commencer. Premium pour préparer la suite.</h2>
           <div className="plans-grid">
             <article className="plan-card">
-              <span className="plan-label">FONCTIONS PRINCIPALES</span>
-              <h3>Conserver, vérifier, exporter.</h3>
-              <p>Dossiers privés, comparaison d’empreintes et export des éléments disponibles.</p>
+              <span className="plan-label">L’ESSENTIEL AU QUOTIDIEN</span>
+              <h3>Free</h3>
+              <p className="offer-price">
+                Gratuit <span>· dans le prototype privé</span>
+              </p>
+              <p>Conservez vos originaux et comprenez ce que les vérifications établissent.</p>
+              <ul>
+                <li>
+                  <Check size={17} /> Dossiers privés et originaux conservés
+                </li>
+                <li>
+                  <Check size={17} /> Comparaison d’empreintes SHA-256
+                </li>
+                <li>
+                  <Check size={17} /> Analyse des indices IA et de la provenance
+                </li>
+                <li>
+                  <Check size={17} /> Rapports et exports des dossiers
+                </li>
+                <li>
+                  <Check size={17} /> Carte et annuaire des commissaires
+                </li>
+              </ul>
+              <a className="welcome-button subtle" href="#connexion">
+                Commencer avec Free <ArrowRight size={17} />
+              </a>
             </article>
             <article className="plan-card premium-card">
-              <span className="plan-label">PREMIUM · OFFRE EN PRÉPARATION</span>
-              <h3>Préparer une transmission à un commissaire de justice</h3>
-              <p>
-                Sélection de pièces, résumé, contrôle de complétude et accès de consultation
-                révocable.
+              <span className="plan-label">POUR PRÉPARER UNE TRANSMISSION</span>
+              <h3>Premium</h3>
+              <p className="offer-price">
+                En préparation <span>· tarif à venir</span>
               </p>
+              <p>
+                Tout Free, avec une préparation guidée du dossier à présenter à un professionnel.
+              </p>
+              <ul>
+                <li>
+                  <Check size={17} /> Sélection précise des pièces à présenter
+                </li>
+                <li>
+                  <Check size={17} /> Résumé et contrôle de complétude
+                </li>
+                <li>
+                  <Check size={17} /> Choix des informations accessibles
+                </li>
+                <li>
+                  <Check size={17} /> Lien de consultation avec expiration
+                </li>
+                <li>
+                  <Check size={17} /> Révocation de l’accès à tout moment
+                </li>
+              </ul>
               <a className="welcome-button subtle" href="/comprendre#premium">
                 Découvrir l’option Premium <ArrowRight size={17} />
               </a>
             </article>
           </div>
+          <p className="offers-note">
+            Premium est accessible en test sur invitation. Aucun paiement ni envoi automatique n’est
+            activé. Les honoraires du professionnel restent distincts.
+          </p>
+        </section>
+        <section
+          className="welcome-section compact-section home-map"
+          aria-label="Carte des commissaires de justice"
+        >
+          <PartnerDirectory />
         </section>
         <section className="welcome-section compact-section simple-faq" id="faq">
           <h2>Les questions essentielles.</h2>

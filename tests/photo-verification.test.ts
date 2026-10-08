@@ -4,6 +4,7 @@ import { mkdtempSync, writeFileSync, readFileSync, renameSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { execFileSync } from 'node:child_process';
+import { generateKeyPairSync } from 'node:crypto';
 import sharp from 'sharp';
 import request from 'supertest';
 import { Store } from '../server/store';
@@ -15,6 +16,13 @@ import { verifyPhoto } from '../server/photo-verification';
 
 test('private photo API preserves bytes, excludes private metadata, signs independently verifiable reports', async () => {
   const directory = mkdtempSync(path.join(tmpdir(), 'preuvix-photo-check-'));
+  // This test exercises report signing with a provisioned key, not OS-specific
+  // first-run key provisioning (which depends on the host's PowerShell policy).
+  writeFileSync(
+    path.join(directory, 'attestation-ed25519.pem'),
+    generateKeyPairSync('ed25519').privateKey.export({ type: 'pkcs8', format: 'pem' }),
+    { mode: 0o600, flag: 'wx' },
+  );
   const store = new Store(directory);
   try {
     const origin = 'http://localhost:3000';

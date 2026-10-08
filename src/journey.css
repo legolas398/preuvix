@@ -160,6 +160,30 @@
 .knowledge-page h1 {
   margin: 24px 0;
 }
+.plan-card .offer-price {
+  font-size: 1.35rem;
+  font-weight: 600;
+}
+.offer-price span {
+  display: block;
+  font-size: 0.9rem;
+  font-weight: 400;
+  margin-top: 6px;
+}
+.offers-note {
+  max-width: 760px;
+  margin-top: 24px;
+}
+.ai-assessment {
+  display: block;
+  padding: 14px 18px;
+  border: 1px solid currentColor;
+  border-radius: 10px;
+}
+.ai-assessment.signals_found,
+.ai-assessment.declared_synthetic {
+  border-left-width: 5px;
+}
 :focus-visible {
   outline: 3px solid #ad461c;
   outline-offset: 4px;

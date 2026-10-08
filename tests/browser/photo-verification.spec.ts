@@ -8,7 +8,10 @@ test('private photo verification shows four blocks and exports a signed private 
 }) => {
   const errors: string[] = [];
   page.on('pageerror', (e) => errors.push(e.message));
-  await page.request.post('/api/login', { headers: { Origin: 'http://localhost:3011' }, data: { password: 'browser-test-password-only' } });
+  await page.request.post('/api/login', {
+    headers: { Origin: 'http://localhost:3011' },
+    data: { password: 'browser-test-password-only' },
+  });
   await page.goto('/', { waitUntil: 'domcontentloaded' });
   await page.getByRole('button', { name: 'Vérifier un fichier' }).click();
   await expect(page.getByRole('heading', { name: 'Vérifier une photo' })).toBeVisible();
@@ -16,6 +19,7 @@ test('private photo verification shows four blocks and exports a signed private 
     create: { width: 64, height: 48, channels: 3, background: '#88aacc' },
   })
     .jpeg()
+    .withExif({ IFD0: { Software: 'ComfyUI' } })
     .toBuffer();
   let uploads = 0;
   page.on('request', (req) => {
@@ -36,6 +40,8 @@ test('private photo verification shows four blocks and exports a signed private 
   await expect(
     page.getByText('création d’une référence — aucune comparaison', { exact: true }),
   ).toBeVisible();
+  await expect(page.getByText('Indices IA à examiner', { exact: true })).toBeVisible();
+  await expect(page.getByText('Métadonnée mentionnant ComfyUI', { exact: true })).toBeVisible();
   const downloaded = page.waitForEvent('download');
   await page.getByRole('button', { name: 'Exporter le rapport de vérification' }).click();
   const download = await downloaded;
@@ -43,6 +49,7 @@ test('private photo verification shows four blocks and exports a signed private 
   expect(zip['manifest.sig']).toBeTruthy();
   expect(Object.keys(zip).some((k) => k.startsWith('original'))).toBe(false);
   expect(JSON.parse(strFromU8(zip['manifest.json'])).schema).toBe('preuvix-photo-verification/1');
+  expect(JSON.parse(strFromU8(zip['manifest.json'])).ai.status).toBe('signals_found');
   await page.screenshot({ path: 'test-results/photo-verification-desktop.png', fullPage: true });
   await page.setViewportSize({ width: 390, height: 844 });
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
