@@ -1,3 +1,4 @@
+import { commitFixture } from './live-fixture';
 import { test, after } from 'node:test';
 import assert from 'node:assert/strict';
 import { existsSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
@@ -55,12 +56,14 @@ async function photo() {
 }
 
 async function deposit(owner: request.Agent, bytes: Buffer) {
+  const captureId = await commitFixture(owner, origin, bytes);
   return (
     await owner
       .post('/api/proofs')
       .set('Origin', origin)
       .field('title', 'Dossier transmis')
-      .field('source', 'upload')
+      .field('source', 'camera')
+      .field('captureId', captureId)
       .field('requestKey', randomUUID())
       .field('clientSha256', hash(bytes))
       .attach('file', bytes, 'photo.jpg')

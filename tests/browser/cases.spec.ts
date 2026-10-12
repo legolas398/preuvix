@@ -1,6 +1,11 @@
 import { test, expect } from '@playwright/test';
 import sharp from 'sharp';
 
+test.use({
+  launchOptions: { args: ['--use-fake-device-for-media-stream', '--use-fake-ui-for-media-stream'] },
+  permissions: ['camera', 'geolocation'],
+  geolocation: { latitude: 48.8566, longitude: 2.3522, accuracy: 15 },
+});
 test.use({ actionTimeout: 30000 });
 const waitFor = expect.configure({ timeout: 30000 });
 
@@ -21,16 +26,22 @@ test('multi-file dossier preserves versions, verifies originals, exports and rev
   await page.getByLabel('Adresse saisie (facultative)').fill('Adresse déclarative de test');
   await page.getByRole('button', { name: 'Enregistrer le dossier', exact: true }).click();
   await expect(page.getByRole('heading', { name: title, exact: true })).toBeVisible();
-  const buffer = await sharp({
-    create: { width: 64, height: 48, channels: 3, background: '#aabbcc' },
-  })
-    .jpeg()
-    .toBuffer();
-  await page.getByLabel('Fichiers à ajouter', { exact: true }).setInputFiles([
-    { name: 'premier.jpg', mimeType: 'image/jpeg', buffer },
-    { name: 'second.jpg', mimeType: 'image/jpeg', buffer },
-  ]);
-  await page.getByRole('button', { name: 'Ajouter les fichiers sélectionnés' }).click();
+  async function capture(title: string) {
+    await page.getByRole('button', { name: 'Capturer une photo ou vidéo', exact: true }).click();
+    await page.getByRole('button', { name: 'Caméra', exact: true }).click();
+    await page.getByRole('button', { name: 'Prendre la photo', exact: true }).click();
+    await page.locator('#proof-title').fill(title);
+    const saved = page.waitForResponse(
+      (r) => r.url().endsWith('/api/proofs') && r.request().method() === 'POST',
+    );
+    await page.getByRole('button', { name: 'Conserver ma preuve' }).click();
+    const proof = await (await saved).json();
+    await expect(page.getByRole('dialog')).toHaveCount(0);
+    return (await page.request.get('/api/proofs/' + proof.id + '/original')).body();
+  }
+  await expect(page.getByLabel('Fichiers à ajouter')).toHaveCount(0);
+  const buffer = await capture('premier.jpg');
+  await capture('second.jpg');
   await waitFor(page.getByText('Fichier enregistré', { exact: true })).toHaveCount(2);
   await expect(page.getByRole('combobox', { name: 'Version du dossier', exact: true })).toHaveValue(
     '3',
@@ -38,7 +49,7 @@ test('multi-file dossier preserves versions, verifies originals, exports and rev
   await expect(page.getByRole('button', { name: 'Demander l’ancrage blockchain' })).toBeDisabled();
   await expect(
     page.locator('.case-service').getByText('Non configuré', { exact: true }),
-  ).toHaveCount(3);
+  ).toHaveCount(2);
   await page.getByRole('button', { name: 'Contrôler l’intégrité du dossier' }).click();
   await expect(page.getByRole('status')).toContainText('Intégrité vérifiée');
   const first = page
@@ -53,10 +64,7 @@ test('multi-file dossier preserves versions, verifies originals, exports and rev
   await page
     .getByRole('combobox', { name: 'Action', exact: true })
     .selectOption({ label: 'Nouvelle version de : premier.jpg' });
-  await page
-    .getByLabel('Fichiers à ajouter', { exact: true })
-    .setInputFiles({ name: 'remplacement.jpg', mimeType: 'image/jpeg', buffer });
-  await page.getByRole('button', { name: 'Ajouter les fichiers sélectionnés' }).click();
+  await capture('remplacement.jpg');
   await expect(page.getByRole('combobox', { name: 'Version du dossier', exact: true })).toHaveValue(
     '4',
   );

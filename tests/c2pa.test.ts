@@ -1,3 +1,4 @@
+import { commitFixture } from './live-fixture';
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { mkdtempSync, rmSync, readFileSync, writeFileSync } from 'node:fs';
@@ -235,12 +236,14 @@ test('a deposit signed by a trusted camera is certified as camera_signed in the 
     const owner = request.agent(createApp(config, store));
     await owner.post('/api/login').set('Origin', origin).send({ password }).expect(200);
     const bytes = await authority.sign(await photo(), 'digitalCapture');
+    const captureId = await commitFixture(owner, origin, bytes);
     const proof = (
       await owner
         .post('/api/proofs')
         .set('Origin', origin)
         .field('title', 'Photo signée')
-        .field('source', 'upload')
+        .field('source', 'camera')
+        .field('captureId', captureId)
         .field('requestKey', randomUUID())
         .field('clientSha256', hash(bytes))
         .attach('file', bytes, 'photo.jpg')
@@ -252,7 +255,7 @@ test('a deposit signed by a trusted camera is certified as camera_signed in the 
       .post(`/api/proofs/${proof.id}/review`)
       .set('Origin', origin)
       .send({ outcome: 'confirmed', reviewer: 'Témoin' })
-      .expect(409);
+      .expect(201);
   } finally {
     store.close();
     rmSync(directory, { recursive: true, force: true });

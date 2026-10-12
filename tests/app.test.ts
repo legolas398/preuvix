@@ -1,3 +1,4 @@
+import { commitFixture } from './live-fixture';
 import { after, test } from 'node:test';
 import assert from 'node:assert/strict';
 import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
@@ -123,16 +124,30 @@ function fixture(timestamp?: TimestampService) {
   const app = createApp(config, store, timestamp);
   const agent = request.agent(app);
   const login = () => agent.post('/api/login').set('Origin', origin).send({ password }).expect(200);
-  const upload = (bytes: Buffer, key = randomUUID(), clientHash = hash(bytes)) =>
-    agent
-      .post('/api/proofs')
-      .set('Origin', origin)
-      .field('title', 'Mur avant travaux')
-      .field('description', 'État déclaré')
-      .field('source', 'upload')
-      .field('requestKey', key)
-      .field('clientSha256', clientHash)
-      .attach('file', bytes, 'photo.jpg');
+  const captures = new Map<string, Promise<string>>();
+  const upload = (bytes: Buffer, key = randomUUID(), clientHash = hash(bytes)) => {
+    if (!captures.has(key)) captures.set(key, commitFixture(agent, origin, bytes));
+    const pending = (async () => {
+      const captureId = await captures.get(key)!;
+      return agent
+        .post('/api/proofs')
+        .set('Origin', origin)
+        .field('title', 'Mur avant travaux')
+        .field('description', 'État déclaré')
+        .field('source', 'camera')
+        .field('captureId', captureId)
+        .field('requestKey', key)
+        .field('clientSha256', clientHash)
+        .attach('file', bytes, 'photo.jpg');
+    })();
+    return Object.assign(pending, {
+      expect: async (status: number) => {
+        const response = await pending;
+        assert.equal(response.status, status, JSON.stringify(response.body));
+        return response;
+      },
+    });
+  };
   return { config, store, app, agent, login, upload };
 }
 after(() => {

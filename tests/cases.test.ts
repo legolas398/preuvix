@@ -1,3 +1,4 @@
+import { commitFixture } from './live-fixture';
 import { test, type TestContext } from 'node:test';
 import assert from 'node:assert/strict';
 import { mkdtempSync, writeFileSync, rmSync } from 'node:fs';
@@ -15,10 +16,72 @@ import { hash } from '../server/integrity';
 import { canonicalJson } from '../shared/canonical';
 import { migrateCases } from '../server/case-store';
 import type { TimestampService } from '../server/timestamp';
+import { createRequire } from 'node:module';
+import { CALENDARS } from '../server/blockchain';
 
 const origin = 'http://localhost:3000',
   password = 'dossier-test-password-long',
   secret = 'only-a-fixture-webhook-secret-123456789';
+
+test('free Bitcoin anchoring persists pending OTS, verifies, downloads and exports the exact version', async (t) => {
+  const ots = createRequire(import.meta.url)('opentimestamps');
+  let submissions = 0;
+  const f = await fixture(t, {}, async (input, init) => {
+    if (init?.method !== 'POST') return new Response('', { status: 404 });
+    submissions++;
+    assert.ok(CALENDARS.some((base) => String(input) === base + '/digest'));
+    const timestamp = new ots.Timestamp([...Buffer.from(init.body as Uint8Array)]);
+    timestamp.attestations.push(new ots.Notary.PendingAttestation(CALENDARS[0]));
+    const ctx = new ots.Context.StreamSerialization();
+    timestamp.serialize(ctx);
+    return new Response(Uint8Array.from(ctx.getOutput()));
+  });
+  const dossier = await f.create();
+  const base = `/api/cases/${dossier.manifest.id}`;
+  await f.owner
+    .post(`${base}/services/anchor`)
+    .set('Origin', origin)
+    .send({ version: 2, consent: false })
+    .expect(400);
+  assert.equal(submissions, 0);
+  const result = (
+    await f.owner
+      .post(`${base}/services/anchor`)
+      .set('Origin', origin)
+      .send({ version: 2, consent: true })
+      .expect(200)
+  ).body;
+  const op = result.operations[0];
+  assert.equal(op.state, 'pending');
+  assert.equal(op.result.provider, 'OpenTimestamps');
+  assert.equal(op.result.manifestHash, dossier.manifestHash);
+  const proof = Buffer.from(op.result.otsProofBase64, 'base64');
+  assert.equal(
+    Buffer.from(ots.DetachedTimestampFile.deserialize(proof).fileDigest()).toString('hex'),
+    dossier.manifestHash,
+  );
+  const operation = `${base}/operations/${op.id}`;
+  await request(f.app).get(`${operation}/blockchain-proof`).expect(401);
+  await f.owner.get(`${operation}/blockchain-proof`).expect(200);
+  const checked = (
+    await f.owner.post(`${operation}/verify-blockchain`).set('Origin', origin).expect(200)
+  ).body;
+  assert.equal(checked.operations[0].state, 'pending');
+  assert.equal(submissions, 2); // Checking a receipt never publishes another commitment.
+  const zip = (await f.owner.get(`${base}/export?version=2`).buffer(true).parse(binary).expect(200))
+    .body;
+  const files = unzipSync(zip);
+  assert.ok(files['dossier.json.ots']);
+  assert.equal(hash(files['dossier.json']), dossier.manifestHash);
+  f.store.db
+    .prepare('UPDATE case_operations SET result=? WHERE id=?')
+    .run(
+      JSON.stringify({ ...op.result, otsProofBase64: Buffer.from('tampered').toString('base64') }),
+      op.id,
+    );
+  await f.owner.get(`${operation}/blockchain-proof`).expect(409);
+  await f.owner.post(`${operation}/verify-blockchain`).set('Origin', origin).expect(502);
+});
 async function fixture(
   t: TestContext,
   env: NodeJS.ProcessEnv = {},
@@ -50,13 +113,15 @@ async function fixture(
     .jpeg()
     .toBuffer();
   async function deposit(title = 'Photo confidentielle') {
+    const captureId = await commitFixture(owner, origin, bytes);
     return (
       await owner
         .post('/api/proofs')
         .set('Origin', origin)
         .field('title', title)
         .field('description', 'Donnée privée')
-        .field('source', 'upload')
+        .field('source', 'camera')
+        .field('captureId', captureId)
         .field('requestKey', randomUUID())
         .field('clientSha256', hash(bytes))
         .attach('file', bytes, 'original.jpg')
@@ -135,7 +200,8 @@ test('case versions preserve originals, enforce permissions and produce independ
     .set('Origin', origin)
     .send({ expectedVersion: 2, proofId: randomUUID() })
     .expect(404);
-  for (const kind of ['anchor', 'signature', 'timestamp'])
+  assert.equal(dossier.services.anchor.configured, true);
+  for (const kind of ['signature', 'timestamp'])
     await f.owner
       .post(`/api/cases/${id}/services/${kind}`)
       .set('Origin', origin)

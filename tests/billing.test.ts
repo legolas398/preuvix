@@ -1,3 +1,4 @@
+import { commitFixture } from './live-fixture';
 import { test, after } from 'node:test';
 import assert from 'node:assert/strict';
 import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
@@ -268,12 +269,14 @@ test('failed webhook reconciliation remains retryable and paid capacity is enfor
   })
     .jpeg()
     .toBuffer();
+  const captureId = await commitFixture(f.agent, origin, photo);
   const upload = () =>
     f.agent
       .post('/api/proofs')
       .set('Origin', origin)
       .field('title', 'Billing quota test')
-      .field('source', 'upload')
+      .field('source', 'camera')
+      .field('captureId', captureId)
       .field('requestKey', randomUUID())
       .field('clientSha256', hash(photo))
       .attach('file', photo, 'photo.jpg');

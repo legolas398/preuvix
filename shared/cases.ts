@@ -34,6 +34,12 @@ export type CaseManifest = CaseInput & {
 export type ServiceKind = 'timestamp' | 'anchor' | 'signature';
 export type ServiceState = 'pending' | 'confirmed' | 'failed';
 export type ServiceResult = {
+  otsProofBase64?: string;
+  otsProofSha256?: string;
+  blockHeight?: number;
+  blockHash?: string;
+  verifiedAt?: string;
+  verificationMethod?: 'ots_merkle_two_explorers';
   provider?: string;
   network?: string;
   transactionId?: string;

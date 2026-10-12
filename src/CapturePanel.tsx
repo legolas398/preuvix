@@ -32,7 +32,6 @@ export default function CapturePanel({
   const [busy, setBusy] = useState(false);
   const [recording, setRecording] = useState(false);
   const [audio, setAudio] = useState(false);
-  const [locate, setLocate] = useState(false);
   const [attempt, setAttempt] = useState(0);
   const [seconds, setSeconds] = useState(0);
   const [now, setNow] = useState(() => Date.now());
@@ -109,7 +108,11 @@ export default function CapturePanel({
     setBusy(true);
     setError('');
     try {
-      const endLocation = kind === 'video' ? await readCaptureLocation(locate) : undefined;
+      const endLocation = kind === 'video' ? await readCaptureLocation(true) : undefined;
+      if (endLocation && endLocation.status !== 'recorded')
+        throw new Error(
+          'Localisation de fin obligatoire. Autorisez la position puis recommencez la vidéo.',
+        );
       const sha256 = await sha256File(file);
       if (!alive.current) return;
       await post(`/api/captures/${session.id}/commit`, {
@@ -131,8 +134,15 @@ export default function CapturePanel({
   async function photo() {
     if (!video.current?.videoWidth) return;
     setBusy(true);
-    const startLocation = await readCaptureLocation(locate);
+    const startLocation = await readCaptureLocation(true);
     if (!alive.current) return;
+    if (startLocation.status !== 'recorded') {
+      setBusy(false);
+      setError(
+        'Localisation obligatoire. Autorisez la position dans votre navigateur puis recommencez la session.',
+      );
+      return;
+    }
     const startedAt = new Date().toISOString();
     const canvas = document.createElement('canvas');
     canvas.width = video.current.videoWidth;
@@ -172,8 +182,15 @@ export default function CapturePanel({
     }
     try {
       setBusy(true);
-      const startLocation = await readCaptureLocation(locate);
+      const startLocation = await readCaptureLocation(true);
       if (!alive.current) return;
+      if (startLocation.status !== 'recorded') {
+        setBusy(false);
+        setError(
+          'Localisation obligatoire. Autorisez la position dans votre navigateur puis recommencez la session.',
+        );
+        return;
+      }
       const active = new MediaRecorder(stream.current, {
         mimeType: mime,
         videoBitsPerSecond: 2500000,
@@ -238,19 +255,11 @@ export default function CapturePanel({
         </li>
       </ol>
       <video ref={video} autoPlay playsInline muted onLoadedData={() => setReady(true)} />
-      <label className="capture-check">
-        <input
-          type="checkbox"
-          checked={locate}
-          disabled={recording || busy}
-          onChange={(event) => setLocate(event.target.checked)}
-        />
-        Inclure la localisation de la prise de vue
-      </label>
+      <strong>Localisation obligatoire de la prise de vue</strong>
       <p>
         Avec votre autorisation, la position et sa précision sont relevées à la prise de vue (au
         début et à la fin pour une vidéo), puis incluses dans le dossier privé et ses exports. Un
-        refus ou une indisponibilité sera indiqué. Aucune localisation en arrière-plan. Ces
+        refus ou une indisponibilité bloque la capture. Aucune localisation en arrière-plan. Ces
         coordonnées déclarées par l’appareil ne prouvent pas le lieu réel de la scène.
       </p>
       <label className="capture-check">
@@ -294,7 +303,7 @@ export default function CapturePanel({
         </p>
       )}
       {busy && (
-        <p role="status">Relevé de position si autorisé, calcul SHA-256 et engagement serveur…</p>
+        <p role="status">Relevé de position obligatoire, calcul SHA-256 et engagement serveur…</p>
       )}
       {error && <p role="alert">{error}</p>}
       <div className="button-row">

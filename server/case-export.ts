@@ -76,6 +76,14 @@ export async function caseReport(detail: CaseDetail) {
     if (operation?.result) {
       const result = operation.result;
       if (result.provider) line(`Prestataire : ${result.provider}`);
+      if (result.otsProofBase64) {
+        line(
+          `Preuve OpenTimestamps Bitcoin : ${result.blockHeight ? `bloc ${result.blockHeight}, ${result.confirmations} confirmations` : 'en attente de confirmation'}`,
+        );
+        line(
+          'Contrôle de la racine de Merkle avec deux explorateurs publics ; seuil de 6 confirmations.',
+        );
+      }
       if (result.network)
         line(
           `Réseau : ${result.network} · transaction : ${result.transactionId ?? 'En attente'} · confirmations annoncées : ${result.confirmations ?? 0}`,
@@ -97,7 +105,7 @@ export async function caseReport(detail: CaseDetail) {
     if (operation?.error) line(operation.error);
   }
   line(
-    'L’ancrage porte sur le manifeste de version, pas sur le rapport généré ensuite. Les justificatifs sont joints au ZIP. Une confirmation blockchain est une déclaration du service configuré ; elle n’établit pas la réalité des faits.',
+    'L’ancrage porte sur le manifeste de version, pas sur le rapport généré ensuite. Les justificatifs sont joints au ZIP. OpenTimestamps est contrôlé avec les explorateurs Bitcoin ; un prestataire personnalisé fournit sa propre confirmation. Aucun ancrage n’établit la réalité des faits.',
   );
   line(
     'Les coordonnées peuvent être simulées. Aucune preuve incontestable ni recevabilité juridique garantie.',
@@ -139,6 +147,15 @@ export async function caseArchive(
   files['dossier-attestation.json'] = json(detail.attestation);
   files['rapport.pdf'] = await caseReport(detail);
   for (const operation of detail.operations) {
+    if (operation.result?.otsProofBase64) {
+      const proof = Buffer.from(operation.result.otsProofBase64, 'base64');
+      if (hash(proof) !== operation.result.otsProofSha256)
+        throw new CaseError(409, 'Preuve blockchain altérée.');
+      files['dossier.json.ots'] = proof;
+      files['VERIFIER-BITCOIN.txt'] = Buffer.from(
+        'OpenTimestamps / Bitcoin (gratuit)\nots upgrade dossier.json.ots\nots verify dossier.json.ots\nUne preuve en attente ne constitue pas une confirmation Bitcoin.\nPREUVIX vérifie la racine de Merkle avec deux explorateurs publics ; pour une vérification indépendante, utilisez votre propre nœud Bitcoin avec le client OpenTimestamps.\n',
+      );
+    }
     const row = store.db
       .prepare('SELECT source_pdf,signed_pdf,tsq,tsr FROM case_operations WHERE id=?')
       .get(operation.id) as Record<string, Uint8Array | null>;

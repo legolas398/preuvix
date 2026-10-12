@@ -714,6 +714,10 @@ function CreateProof({
   }, [file, fileHash]);
   const choose = (selected: File | undefined, from: 'upload' | 'camera', sessionId = '') => {
     if (!selected) return;
+    if (from !== 'camera' || !sessionId) {
+      setError('Capture en direct avec localisation obligatoire. Les imports sont désactivés.');
+      return;
+    }
     setFileHash('');
     setFile(null);
     if (selected.size > (selected.type.startsWith('video/') ? 50 * 1024 * 1024 : MAX_PHOTO_BYTES)) {
@@ -767,8 +771,8 @@ function CreateProof({
       }}
     >
       <p className="modal-subtitle">
-        Capturez ou importez une photo ou une vidéo, documentez les faits et obtenez votre
-        attestation technique PDF.
+        Capturez en direct une photo ou une vidéo avec sa localisation, documentez les faits et
+        obtenez votre attestation technique PDF.
       </p>
       {camera ? (
         <CapturePanel
@@ -783,7 +787,8 @@ function CreateProof({
               onDragOver={(e) => e.preventDefault()}
               onDrop={(e) => {
                 e.preventDefault();
-                if (!busy) choose(e.dataTransfer.files[0], 'upload');
+                if (!busy)
+                  setError('Les imports sont désactivés. Utilisez la caméra avec la localisation.');
               }}
             >
               {preview ? (
@@ -806,31 +811,18 @@ function CreateProof({
                   <div className="round-icon">
                     <Upload size={25} />
                   </div>
-                  <h3>Déposez votre photo ou vidéo ici</h3>
-                  <p>
-                    Photo : JPEG, PNG, WebP · 10 Mo. Vidéo : MP4, WebM · 50 Mo, 120 secondes
-                    maximum.
-                  </p>
+                  <h3>Capturez votre photo ou vidéo en direct</h3>
+                  <p>Caméra et localisation obligatoires. Vidéo : 60 secondes maximum.</p>
                 </>
               )}
               <div className="button-row">
-                <label className="button secondary file-button">
-                  <ImagePlus size={16} /> {file ? 'Changer la photo' : 'Choisir un fichier'}
-                  <input
-                    type="file"
-                    accept="image/jpeg,image/png,image/webp,video/mp4,video/webm"
-                    onChange={(e) => choose(e.target.files?.[0], 'upload')}
-                    aria-label="Choisir une photo"
-                  />
-                </label>
                 <button type="button" className="button secondary" onClick={() => setCamera(true)}>
                   <Camera size={16} /> Caméra
                 </button>
               </div>
             </div>
             <p className="phone-format-help">
-              Sur iPhone, choisissez une copie JPEG si la photo est au format HEIC. Aucun fichier
-              n’est converti automatiquement.
+              Autorisez la caméra et la localisation dans votre navigateur pour créer une preuve.
             </p>
             {hashing && (
               <div className="hash-progress" role="status">
@@ -880,8 +872,8 @@ function CreateProof({
             <div className="privacy-hint">
               <LockKeyhole size={15} />
               <span>
-                Privé par défaut. La localisation est incluse uniquement si vous l’avez activée
-                pendant la capture. L’original peut aussi contenir ses propres métadonnées.
+                Privé par défaut. La localisation obligatoire est conservée avec la capture et
+                incluse dans ses exports. L’original peut aussi contenir ses propres métadonnées.
               </span>
             </div>
             <details className="capture-declaration">

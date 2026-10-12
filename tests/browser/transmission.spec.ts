@@ -21,12 +21,37 @@ async function deposit(page: Page) {
     .jpeg()
     .toBuffer();
   const title = 'Pièce fictive ' + randomUUID().slice(0, 8);
+  const session = await (
+    await page.request.post('/api/captures', { headers: { Origin: origin }, data: {} })
+  ).json();
+  const at = new Date().toISOString();
+  const commit = await page.request.post('/api/captures/' + session.id + '/commit', {
+    headers: { Origin: origin },
+    data: {
+      nonce: session.nonce,
+      sha256: createHash('sha256').update(bytes).digest('hex'),
+      kind: 'photo',
+      startedAt: at,
+      endedAt: at,
+      location: {
+        start: {
+          status: 'recorded',
+          latitude: 48.8566,
+          longitude: 2.3522,
+          accuracy: 12,
+          measuredAt: at,
+        },
+      },
+    },
+  });
+  expect(commit.status()).toBe(200);
   const result = await page.request.post('/api/proofs', {
     headers: { Origin: origin },
     multipart: {
       title,
       description: 'NOTE CONFIDENTIELLE DE TEST',
-      source: 'upload',
+      source: 'camera',
+      captureId: session.id,
       requestKey: randomUUID(),
       clientSha256: createHash('sha256').update(bytes).digest('hex'),
       file: { name: 'fictive.jpg', mimeType: 'image/jpeg', buffer: bytes },

@@ -1,6 +1,6 @@
 # PREUVIX
 
-Prototype privé local : capturer ou importer une photo ou une vidéo, figer son empreinte et son contexte, signer le manifeste, exporter un dossier et comparer les fichiers. Licence MIT. Aucun paiement ni envoi professionnel dans le mode prototype, activé par défaut.
+Prototype privé local : capturer en direct une photo ou une vidéo avec localisation obligatoire, figer son empreinte et son contexte, signer le manifeste, exporter un dossier et comparer les fichiers. Licence MIT. Aucun paiement ni envoi professionnel dans le mode prototype, activé par défaut.
 
 La [structure des écrans et le parcours Premium](docs/parcours-premium.md) décrivent la sélection des pièces, les brouillons, les informations accessibles et les tests. `PREMIUM_TRANSMISSION_TEST=false` par défaut ; seul le serveur peut accorder cet accès de test.
 
@@ -40,7 +40,7 @@ npm run build
 ## Ce qui fonctionne
 
 - Interface française responsive, un espace privé protégé par mot de passe, sessions de 12 h.
-- Import JPEG/PNG/WebP (10 Mo, 40 mégapixels maximum), caméra via `getUserMedia`, refus des images invalides et animées.
+- Capture caméra via `getUserMedia`, localisation obligatoire pour les photos et au début et à la fin des vidéos. Imports refusés dans l’interface et l’API.
 - Octets reçus conservés sans transformation, SHA-256 côté serveur, manifeste JSON figé avec titre, contexte, origine déclarée et métadonnées techniques.
 - Empreinte SHA-256 calculée dans le navigateur avant l'envoi et affichée dans le formulaire. Le serveur refait le calcul et refuse le dépôt si les empreintes diffèrent. L'API de dépôt exige maintenant le champ `clientSha256` ; recharger les anciens onglets après mise à jour.
 - Validation réelle des signatures C2PA (Content Credentials) des appareils compatibles : intégrité, signataire (liste de confiance via `C2PA_TRUST_ANCHORS`) et type de source déclaré. Une signature de confiance déclarant une capture numérique donne le statut « signature d'appareil vérifiée » ; une signature cassée ou une génération IA déclarée impose un examen.
@@ -119,19 +119,19 @@ Ces montants sont des **plafonds de planification, pas des devis** : 25 € pour
 
 Limiter le pilote à un propriétaire et quelques testeurs accompagnés, sans transmettre le mot de passe à des utilisateurs indépendants. Mesurer le temps de dépôt, la compréhension du rapport et la capacité à vérifier/exporter un dossier. Ne pas ajouter de facturation.
 
-## Essayer le parcours import → empreinte → comparaison
+## Essayer le parcours capture → empreinte → comparaison
 
-1. Choisir « Créer une preuve », puis une photo JPEG, PNG ou WebP. Attendre l'empreinte SHA-256 : la photo n'est pas envoyée à ce stade.
+1. Choisir « Créer une preuve », puis « Caméra ». Autoriser la caméra et la localisation, suivre le défi et capturer une photo ou une vidéo. Attendre l'empreinte SHA-256 : le média n'est pas envoyé à ce stade.
 2. Ajouter le titre puis conserver le dossier. Le serveur exige que son empreinte corresponde à celle du navigateur.
-3. Dans le dossier, ouvrir « Comparer une copie avec ce dossier » et sélectionner le même fichier : correspondance attendue, sans partage public ni nouvel envoi.
+3. Télécharger l’original, ouvrir « Comparer une copie avec ce dossier » et sélectionner cette copie : correspondance attendue, sans partage public ni nouvel envoi.
 4. Essayer une copie modifiée ou réencodée : différence attendue, même si la photo semble identique à l'œil.
 5. Exporter le ZIP et le rapport. Dans « Vérifier un fichier », coller l'empreinte du rapport et sélectionner la copie pour une comparaison sans dépendre d'un lien de partage.
 
-HEIC/HEIF n'est pas décodé par ce pilote. Le formulaire et le serveur le refusent avec une explication. Exporter volontairement une copie JPEG depuis la photothèque : PREUVIX conserve alors les octets de cette copie et n'établit aucune identité avec le HEIC initial. Aucune conversion automatique n'est effectuée. Tester ce choix sur un véritable iPhone et Android avant ouverture ; les tests navigateur automatisés ne remplacent pas les sélecteurs de fichiers natifs.
+Les imports depuis la photothèque sont désactivés. La capture navigateur nécessite HTTPS (ou localhost), une caméra et une position disponible. Tester les permissions sur un véritable iPhone et Android avant ouverture ; les tests automatisés utilisent une caméra et une position simulées.
 
 ## France, données personnelles et limites
 
-L'opérateur doit compléter ses informations légales et sa politique de confidentialité avant ouverture : identité/contact, finalités, bases légales, destinataires, hébergement, prestataire TSA, conservation, droits et procédure de suppression. La capture propose une géolocalisation facultative et consentie, incluse dans le dossier privé et ses exports. Le fichier original peut aussi contenir des données personnelles de tiers ou ses propres coordonnées GPS. L'empreinte envoyée au prestataire n'est pas une promesse d'anonymisation.
+L'opérateur doit compléter ses informations légales et sa politique de confidentialité avant ouverture : identité/contact, finalités, bases légales, destinataires, hébergement, prestataire TSA, conservation, droits et procédure de suppression. La capture exige une géolocalisation avec autorisation du navigateur, incluse dans le dossier privé et ses exports. Le fichier original peut aussi contenir des données personnelles de tiers ou ses propres coordonnées GPS. L'empreinte envoyée au prestataire n'est pas une promesse d'anonymisation.
 
 Une suppression n'efface ni les exports détenus par d'autres, ni les sauvegardes externes, ni les éventuels journaux du prestataire. Définir une conservation adaptée au cas d'usage avec un professionnel du droit. Ne pas promettre une recevabilité automatique, une identité vérifiée, un lieu certifié ou une détection certaine d'IA.
 
@@ -178,4 +178,4 @@ Ces tests ne valident pas un vrai prestataire, son statut qualifié ni les coût
 
 # Dossiers multi-fichiers
 
-Création, versions immuables, contrôle SHA-256 serveur, exports PDF/JSON/ZIP et partage révocable : voir [la configuration des dossiers et prestataires](docs/dossiers-prestataires.md). Les passerelles d’ancrage et de signature restent « Non configuré » tant que leurs services et identifiants ne sont pas fournis.
+Création, versions immuables, contrôle SHA-256 serveur, exports PDF/JSON/ZIP et partage révocable : voir [la configuration des dossiers et prestataires](docs/dossiers-prestataires.md). L’ancrage [OpenTimestamps sur Bitcoin](docs/blockchain-verification.md) est gratuit et disponible sans configuration. Le reçu reste en attente jusqu’à vérification et six confirmations. La passerelle de signature nécessite sa propre configuration.

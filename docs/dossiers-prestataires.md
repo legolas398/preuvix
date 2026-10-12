@@ -1,10 +1,12 @@
 # Dossiers, intégrité et services de preuve
 
 L’onglet **Dossiers multi-fichiers** permet de créer un dossier titré et décrit,
-d’ajouter des originaux, de remplacer un fichier en conservant son historique,
+d’ajouter des captures en direct géolocalisées, de remplacer un fichier en conservant son historique,
 de recalculer les empreintes et de télécharger un PDF, un manifeste JSON ou un ZIP.
 Les formats acceptés restent JPEG/PNG/WebP (10 Mo) et MP4/WebM (50 Mo), avec
 50 fichiers par version et 100 Mo d’originaux maximum par ZIP.
+
+Par défaut, l’ancrage utilise [OpenTimestamps sur Bitcoin, sans frais](blockchain-verification.md). Les paramètres de passerelle ci-dessous ne sont utiles que pour un prestataire personnalisé.
 
 ## Données et permissions
 
@@ -39,7 +41,7 @@ Ne pas copier seulement le fichier principal pendant une écriture en mode WAL.
 La date de réception du serveur est distincte d’un horodatage RFC 3161. La capture
 du navigateur demande l’accord de l’utilisateur et conserve latitude, longitude,
 précision en mètres, date et source `browser_geolocation`. Le refus et
-l’indisponibilité sont conservés. Les captures anciennes sans champ source restent
+l’indisponibilité bloquent désormais toute nouvelle capture. Les captures anciennes sans champ source restent
 lisibles. Une adresse saisie est déclarative et ne devient jamais une position GPS.
 Les coordonnées peuvent être simulées ; elles ne prouvent pas à elles seules le
 lieu de prise de vue.

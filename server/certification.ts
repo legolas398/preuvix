@@ -197,6 +197,14 @@ export function certification(store: Store, directory: string) {
     const row = get(id, owner);
     if (!row.record) throw new Error('Empreinte de capture non enregistrée.');
     const record: CaptureRecord = JSON.parse(row.record);
+    captureCommitSchema.parse({
+      sha256: record.sha256,
+      kind: record.kind,
+      startedAt: record.startedAt,
+      endedAt: record.endedAt,
+      nonce: record.nonce,
+      location: record.location,
+    });
     if (record.sha256 !== sha256)
       throw new Error('Le fichier ne correspond pas à la capture engagée.');
     if (Date.now() - Date.parse(record.committedAt) > 24 * 3600000)

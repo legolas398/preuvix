@@ -24,6 +24,7 @@ import {
   providerStatus,
 } from './evidence-services';
 import { hash } from './integrity';
+import { blockchain, OTS_PROVIDER_KEY } from './blockchain';
 
 type Op = {
   id: string;
@@ -55,6 +56,8 @@ export function createCases(
   const cases = caseStore(store, attest),
     client = evidenceClient(config.evidenceServices, transport);
   const active = new Set<string>();
+  const bitcoin = blockchain(transport);
+  const freeAnchor = !config.evidenceServices.anchor.url;
   const operation = (id: string) => {
     const op = store.db.prepare('SELECT * FROM case_operations WHERE id=?').get(id) as
       Op | undefined;
@@ -101,10 +104,12 @@ export function createCases(
           provider: config.timestampConfigured ? config.timestamp.name : null,
         },
         anchor: {
-          configured: config.evidenceServices.anchor.configured,
-          provider: config.evidenceServices.anchor.configured
-            ? config.evidenceServices.anchor.name
-            : null,
+          configured: freeAnchor || config.evidenceServices.anchor.configured,
+          provider: freeAnchor
+            ? 'OpenTimestamps · Bitcoin · gratuit'
+            : config.evidenceServices.anchor.configured
+              ? config.evidenceServices.anchor.name
+              : null,
         },
         signature: {
           configured: config.evidenceServices.signature.configured,
@@ -116,11 +121,13 @@ export function createCases(
     };
   }
   function configured(kind: ServiceKind) {
+    if (kind === 'anchor' && freeAnchor) return true;
     return kind === 'timestamp'
       ? config.timestampConfigured
       : config.evidenceServices[kind].configured;
   }
   function providerKey(kind: ServiceKind) {
+    if (kind === 'anchor' && freeAnchor) return OTS_PROVIDER_KEY;
     return kind === 'timestamp'
       ? hash(config.timestamp.url + '\n' + config.timestamp.signerSha256)
       : config.evidenceServices[kind].key;
@@ -188,9 +195,9 @@ export function createCases(
       .run(state, JSON.stringify(result), signed, new Date().toISOString(), op.id);
     cases.event(op.case_id, op.version, `${kind}_${state}`);
   }
-  async function run(id: string) {
+  async function run(id: string, reverify = false) {
     let op = operation(id);
-    if (op.state === 'confirmed') return;
+    if (op.state === 'confirmed' && !reverify) return;
     if (!configured(op.kind)) throw new CaseError(409, 'Service non configuré.');
     if (op.provider_key !== providerKey(op.kind))
       throw new CaseError(
@@ -208,7 +215,36 @@ export function createCases(
         )
         .run(new Date().toISOString(), id);
       cases.event(op.case_id, op.version, `${op.kind}_requested`);
-      if (op.kind === 'timestamp') {
+      if (op.kind === 'anchor' && freeAnchor) {
+        const previous: ServiceResult | null = op.result ? JSON.parse(op.result) : null;
+        let proof: Buffer;
+        let checked: Awaited<ReturnType<typeof bitcoin.verify>>;
+        if (previous?.otsProofBase64) {
+          proof = Buffer.from(previous.otsProofBase64, 'base64');
+          if (hash(proof) !== previous.otsProofSha256) throw new Error('Preuve OTS altérée.');
+          checked = await bitcoin.verify(proof, dossier.row.manifest_hash);
+        } else {
+          proof = await bitcoin.stamp(dossier.row.manifest_hash);
+          checked = { proof, state: 'pending', verifiedAt: new Date().toISOString() };
+        }
+        const result: ServiceResult = {
+          provider: 'OpenTimestamps',
+          network: 'Bitcoin',
+          manifestHash: dossier.row.manifest_hash,
+          otsProofBase64: checked.proof.toString('base64'),
+          otsProofSha256: hash(checked.proof),
+          blockHeight: checked.blockHeight,
+          blockHash: checked.blockHash,
+          confirmations: checked.confirmations,
+          verifiedAt: checked.verifiedAt,
+          verificationMethod: 'ots_merkle_two_explorers',
+          ...(checked.state === 'confirmed' ? { confirmedAt: checked.confirmedAt } : {}),
+        };
+        store.db
+          .prepare('UPDATE case_operations SET state=?,result=?,error=NULL,updated_at=? WHERE id=?')
+          .run(checked.state, JSON.stringify(result), new Date().toISOString(), id);
+        cases.event(op.case_id, op.version, `anchor_${checked.state}`);
+      } else if (op.kind === 'timestamp') {
         const stamped = await timestamp(dossier.row.manifest_hash);
         if (hash(stamped.response) !== stamped.receipt.responseSha256)
           throw new Error('Timestamp receipt mismatch');
@@ -506,6 +542,37 @@ export function createCases(
           throw new CaseError(409, 'Document retourné altéré.');
         res.setHeader('Content-Disposition', `attachment; filename="signature-${op.id}.pdf"`);
         res.type('application/pdf').send(Buffer.from(op.signed_pdf));
+      }),
+    );
+    app.get(
+      '/api/cases/:id/operations/:opId/blockchain-proof',
+      requireAuth,
+      safe((req, res) => {
+        const op = operation(z.uuid().parse(req.params.opId));
+        if (op.case_id !== req.params.id || op.kind !== 'anchor')
+          throw new CaseError(404, 'Preuve introuvable.');
+        const result: ServiceResult | null = op.result ? JSON.parse(op.result) : null;
+        if (!result?.otsProofBase64) throw new CaseError(404, 'Preuve OTS indisponible.');
+        const proof = Buffer.from(result.otsProofBase64, 'base64');
+        if (hash(proof) !== result.otsProofSha256) throw new CaseError(409, 'Preuve OTS altérée.');
+        bitcoin.validate(proof, cases.version(op.case_id, op.version).row.manifest_hash);
+        res.setHeader('Content-Disposition', 'attachment; filename="dossier.json.ots"');
+        res.type('application/octet-stream').send(proof);
+      }),
+    );
+    app.post(
+      '/api/cases/:id/operations/:opId/verify-blockchain',
+      requireAuth,
+      safe(async (req, res) => {
+        const op = operation(z.uuid().parse(req.params.opId));
+        if (
+          op.case_id !== req.params.id ||
+          op.kind !== 'anchor' ||
+          op.provider_key !== OTS_PROVIDER_KEY
+        )
+          throw new CaseError(404, 'Preuve OpenTimestamps introuvable.');
+        await run(op.id, true);
+        res.json(detail(op.case_id, op.version));
       }),
     );
     app.get(

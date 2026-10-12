@@ -39,6 +39,12 @@ export const captureCommitSchema = z
   .refine(
     (value) => Date.parse(value.endedAt) >= Date.parse(value.startedAt),
     'Dates incohérentes.',
+  )
+  .refine(
+    (value) =>
+      value.location?.start.status === 'recorded' &&
+      (value.kind !== 'video' || value.location?.end?.status === 'recorded'),
+    'Localisation obligatoire : autorisez la position pour la photo et au début et à la fin de la vidéo.',
   );
 // Shown to the person filming; must appear in the frame. Verified visually after deposit.
 export type LivenessChallenge = { code: string; gesture: string; maxSeconds: number };

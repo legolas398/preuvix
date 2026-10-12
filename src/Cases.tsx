@@ -1,6 +1,5 @@
 import { useEffect, useRef, useState, type FormEvent } from 'react';
 import { api } from './api';
-import { sha256File } from './file-hash';
 import LocalFileCheck from './LocalFileCheck';
 import { CaptureLocation, SignatureControl } from './CaptureEvidence';
 import {
@@ -162,6 +161,16 @@ function ServiceEvidence({ dossier }: { dossier: CaseDetail }) {
             <h3>{serviceLabels[kind]}</h3>
             <strong>{serviceStateLabel(kind, op?.state, dossier.services[kind].configured)}</strong>
             {result?.provider && <p>Prestataire : {result.provider}</p>}
+            {result?.otsProofBase64 && (
+              <p>
+                Bitcoin · preuve OpenTimestamps gratuite.
+                {result.blockHeight
+                  ? ` Bloc ${result.blockHeight} · ${result.confirmations} confirmations.`
+                  : ' En attente de confirmation Bitcoin (plusieurs heures possibles).'}
+                {result.verifiedAt && ` Dernier contrôle : ${utc(result.verifiedAt)}.`} Vérification
+                de la preuve de Merkle avec deux explorateurs publics ; seuil de 6 confirmations.
+              </p>
+            )}
             {result?.transactionId && (
               <p>
                 Réseau : {result.network}
@@ -219,7 +228,6 @@ export default function Cases({
     [notice, setNotice] = useState('');
   const [proofId, setProofId] = useState(''),
     [replaceFileId, setReplaceFileId] = useState('');
-  const [uploads, setUploads] = useState<{ file: File; key: string }[]>([]);
   const [signerEmail, setSignerEmail] = useState(''),
     [anchorConsent, setAnchorConsent] = useState(false),
     [signatureConsent, setSignatureConsent] = useState(false);
@@ -301,7 +309,6 @@ export default function Cases({
         setCreating(false);
         setLinks([]);
         setShareUrl('');
-        setUploads([]);
         setReplaceFileId('');
         setProofId('');
         setAnchorConsent(false);
@@ -318,27 +325,6 @@ export default function Cases({
       await refreshList();
       setNotice('Version enregistrée. Les précédentes sont conservées.');
     });
-  }
-  async function upload() {
-    let current = dossier!;
-    if (replaceFileId && uploads.length !== 1)
-      throw new Error('Choisissez un seul fichier pour remplacer une version.');
-    for (const [index, item] of uploads.entries()) {
-      setBusy(`Dépôt ${index + 1}/${uploads.length} : ${item.file.name}`);
-      const body = new FormData();
-      body.append('file', item.file);
-      body.append('title', item.file.name.slice(0, 120));
-      body.append('source', 'upload');
-      body.append('requestKey', item.key);
-      body.append('clientSha256', await sha256File(item.file));
-      const proof = await api<Proof>('/api/proofs', { method: 'POST', body });
-      if (!current.manifest.files.some((file) => file.proofId === proof.id))
-        current = await attach(proof.id, current);
-    }
-    setUploads([]);
-    setReplaceFileId('');
-    await refreshProofs();
-    setNotice('Originaux enregistrés et ajoutés au dossier.');
   }
   async function service(kind: ServiceKind) {
     try {
@@ -393,7 +379,6 @@ export default function Cases({
               setDossier(null);
               setCreating(false);
               setShareUrl('');
-              setUploads([]);
             }}
           >
             Tous les dossiers
@@ -437,7 +422,6 @@ export default function Cases({
                   void run('Ouverture du dossier…', async () => {
                     setShareUrl('');
                     setReplaceFileId('');
-                    setUploads([]);
                     await open(item.id);
                   })
                 }
@@ -510,33 +494,10 @@ export default function Cases({
                     ))}
                   </select>
                 </label>
-                <label>
-                  Fichiers à ajouter
-                  <input
-                    type="file"
-                    multiple={!replaceFileId}
-                    accept="image/jpeg,image/png,image/webp,video/mp4,video/webm"
-                    onChange={(event) =>
-                      setUploads(
-                        Array.from(event.target.files ?? []).map((file) => ({
-                          file,
-                          key: crypto.randomUUID(),
-                        })),
-                      )
-                    }
-                  />
-                </label>
                 <p>
-                  JPEG, PNG, WebP : 10 Mo ; MP4, WebM : 50 Mo. Les originaux sont conservés sans
-                  modification. Un remplacement conserve l’ancienne version.
+                  Les nouveaux médias doivent être capturés en direct avec leur localisation. Un
+                  remplacement conserve l’ancienne version.
                 </p>
-                <button
-                  className="button primary"
-                  disabled={!uploads.length}
-                  onClick={() => void run('Calcul et dépôt…', upload)}
-                >
-                  Ajouter les fichiers sélectionnés
-                </button>
                 <div className="button-row">
                   <button
                     className="button secondary"
@@ -611,6 +572,12 @@ export default function Cases({
             </button>
             <section className="case-panel">
               <h2>Ancrage, horodatage et signature</h2>
+              {dossier.services.anchor.provider?.includes('OpenTimestamps') && (
+                <p>
+                  OpenTimestamps ancre gratuitement l’empreinte du dossier sur Bitcoin, sans compte
+                  ni frais de transaction. La confirmation peut prendre plusieurs heures.
+                </p>
+              )}
               <p>
                 Chaque demande porte sur la version {dossier.manifest.version}. Une nouvelle version
                 nécessite ses propres justificatifs.
@@ -686,6 +653,42 @@ export default function Cases({
               </button>
               {dossier.operations.map((op) => (
                 <div className="button-row" key={op.id}>
+                  {op.kind === 'anchor' && op.result?.otsProofBase64 && (
+                    <>
+                      <button
+                        className="button secondary"
+                        disabled={!!busy}
+                        onClick={() =>
+                          void run('Vérification Bitcoin…', async () => {
+                            try {
+                              await api(
+                                `/api/cases/${dossier.manifest.id}/operations/${op.id}/verify-blockchain`,
+                                { method: 'POST' },
+                              );
+                            } finally {
+                              await open(dossier.manifest.id, dossier.manifest.version);
+                            }
+                          })
+                        }
+                      >
+                        Vérifier la preuve Bitcoin
+                      </button>
+                      <button
+                        className="button secondary"
+                        disabled={!!busy}
+                        onClick={() =>
+                          void run('Téléchargement…', () =>
+                            download(
+                              `/api/cases/${dossier.manifest.id}/operations/${op.id}/blockchain-proof`,
+                              'dossier.json.ots',
+                            ),
+                          )
+                        }
+                      >
+                        Télécharger la preuve .ots
+                      </button>
+                    </>
+                  )}
                   {op.state !== 'confirmed' && (
                     <button
                       className="button secondary"
@@ -725,9 +728,10 @@ export default function Cases({
                 </div>
               ))}
               <p className="case-muted">
-                La confirmation d’ancrage et le niveau de signature proviennent du service
-                configuré. PREUVIX ne certifie pas leur qualification eIDAS et ne valide pas
-                localement les certificats de signature du PDF retourné.
+                OpenTimestamps vérifie l’engagement avec les explorateurs Bitcoin. Un prestataire
+                personnalisé fournit sa propre confirmation. PREUVIX ne certifie pas leur
+                qualification eIDAS et ne valide pas localement les certificats de signature du PDF
+                retourné.
               </p>
             </section>
             <details>

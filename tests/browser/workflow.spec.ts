@@ -1,11 +1,16 @@
 import { test, expect } from '@playwright/test';
-import sharp from 'sharp';
 import { createHash } from 'node:crypto';
+test.use({
+  launchOptions: { args: ['--use-fake-device-for-media-stream', '--use-fake-ui-for-media-stream'] },
+  permissions: ['camera', 'geolocation'],
+  geolocation: { latitude: 48.8566, longitude: 2.3522, accuracy: 15 },
+});
 
 test('owner creates a private record, shares verification, compares locally, exports and deletes', async ({
   page,
   browser,
 }) => {
+  const title = `État du mur — test navigateur ${Date.now()}`;
   const errors: string[] = [];
   page.on('pageerror', (error) => errors.push(error.message));
   await page.setViewportSize({ width: 1440, height: 1050 });
@@ -13,36 +18,29 @@ test('owner creates a private record, shares verification, compares locally, exp
   await expect(page.getByRole('heading', { name: 'Votre espace de preuves' })).toBeVisible();
   await page.getByLabel('Mot de passe de l’espace').fill('browser-test-password-only');
   await page.getByRole('button', { name: 'Ouvrir mon espace' }).click();
-  await expect(page.getByRole('heading', { name: 'Mes preuves.' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Mes dossiers.' })).toBeVisible();
   await page.screenshot({ path: 'test-results/workspace-desktop.png', fullPage: true });
   await page.getByRole('button', { name: 'Créer une preuve', exact: true }).click();
-  const image = await sharp({
-    create: { width: 800, height: 600, channels: 3, background: '#bac5ae' },
-  })
-    .jpeg()
-    .toBuffer();
-  const expectedHash = createHash('sha256').update(image).digest('hex');
   let deposits = 0;
   page.on('request', (req) => {
     if (req.method() === 'POST' && req.url().endsWith('/api/proofs')) deposits++;
   });
-  await page.getByLabel('Choisir une photo', { exact: true }).setInputFiles({
-    name: 'iphone.heic',
-    mimeType: 'image/heic',
-    buffer: Buffer.from('000000186674797068656963000000006d69663168656963', 'hex'),
-  });
-  await expect(page.getByRole('alert')).toContainText('HEIC/HEIF');
-  await expect(page.getByRole('button', { name: 'Conserver ma preuve' })).toBeDisabled();
-  await page
-    .getByLabel('Choisir une photo', { exact: true })
-    .setInputFiles({ name: 'etat-mur.jpg', mimeType: 'image/jpeg', buffer: image });
-  await expect(page.getByLabel('Empreinte avant dépôt')).toContainText(expectedHash);
+  await expect(page.getByLabel('Choisir une photo')).toHaveCount(0);
+  await page.getByRole('button', { name: 'Caméra', exact: true }).click();
+  await page.getByRole('button', { name: 'Prendre la photo', exact: true }).click();
+  await expect(page.getByLabel('Empreinte avant dépôt')).toBeVisible();
   expect(deposits).toBe(0);
-  await page.getByLabel('Titre du dossier').fill('État du mur — test navigateur');
+  await page.getByLabel('Titre du dossier').fill(title);
   await page.getByLabel('Contexte').fill('Photo privée de test.');
+  const saved = page.waitForResponse(
+    (r) => r.url().endsWith('/api/proofs') && r.request().method() === 'POST',
+  );
   await page.getByRole('button', { name: 'Conserver ma preuve' }).click();
-  await expect(page.getByRole('heading', { name: 'État du mur — test navigateur' })).toBeVisible();
-  await expect(page.getByText('Résultat inconclusif', { exact: true })).toBeVisible();
+  const proof = await (await saved).json();
+  const image = await (await page.request.get('/api/proofs/' + proof.id + '/original')).body();
+  const expectedHash = createHash('sha256').update(image).digest('hex');
+  await expect(page.getByRole('heading', { name: title })).toBeVisible();
+
   expect(deposits).toBe(1);
   let privatePosts = 0;
   const countPrivatePosts = (req: import('@playwright/test').Request) => {
@@ -54,16 +52,15 @@ test('owner creates a private record, shares verification, compares locally, exp
     .getByLabel('Copie à vérifier en privé')
     .setInputFiles({ name: 'original.jpg', mimeType: 'image/jpeg', buffer: image });
   await expect(page.getByText('Correspondance exacte des octets', { exact: true })).toBeVisible();
-  await page
-    .getByLabel('Copie à vérifier en privé')
-    .setInputFiles({
-      name: 'modified.jpg',
-      mimeType: 'image/jpeg',
-      buffer: Buffer.from('modified'),
-    });
+  await page.getByLabel('Copie à vérifier en privé').setInputFiles({
+    name: 'modified.jpg',
+    mimeType: 'image/jpeg',
+    buffer: Buffer.from('modified'),
+  });
   await expect(page.getByText('Le fichier est différent', { exact: true })).toBeVisible();
   expect(privatePosts).toBe(0);
   page.off('request', countPrivatePosts);
+  await page.getByText('Lien de vérification des empreintes', { exact: true }).click();
   await page.getByRole('button', { name: 'Activer un lien de vérification' }).click();
   const href = await page
     .getByRole('link', { name: 'Ouvrir la vérification' })
@@ -94,14 +91,14 @@ test('owner creates a private record, shares verification, compares locally, exp
   const download = page.waitForEvent('download');
   await page.getByRole('link', { name: 'Dossier complet (.zip)' }).click();
   expect((await download).suggestedFilename()).toMatch(/\.zip$/);
-  await page.getByRole('button', { name: 'Fermer', exact: true }).click();
+  await page.getByRole('button', { name: '← Mes dossiers', exact: true }).click();
   await page.setViewportSize({ width: 390, height: 844 });
-  await expect(page.getByRole('heading', { name: 'Mes preuves.' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Mes dossiers.' })).toBeVisible();
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(
     true,
   );
   await page.screenshot({ path: 'test-results/workspace-mobile.png', fullPage: true });
-  await page.getByRole('button', { name: /État du mur — test navigateur/ }).click();
+  await page.getByRole('button', { name: new RegExp(title) }).click();
   await page.getByRole('button', { name: 'Supprimer ce dossier', exact: true }).click();
   await page.getByLabel('Tapez SUPPRIMER pour confirmer').fill('SUPPRIMER');
   await page.getByRole('button', { name: 'Supprimer le dossier', exact: true }).click();

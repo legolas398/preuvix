@@ -3,43 +3,31 @@ test.use({
   launchOptions: { args: ['--use-fake-device-for-media-stream', '--use-fake-ui-for-media-stream'] },
 });
 
-test('capture geolocation is opt-in and denial or unavailability does not block the photo', async ({
-  page,
-}) => {
+test('mandatory location blocks photo and video when denied or unavailable', async ({ page }) => {
   await page.addInitScript(() => {
     let calls = 0;
     Object.defineProperty(navigator.geolocation, 'getCurrentPosition', {
-      value: (_success: unknown, failure: (error: { code: number }) => void) => {
-        calls++;
-        failure({ code: calls === 1 ? 1 : 2 });
-      },
+      value: (_success: unknown, failure: (error: { code: number }) => void) =>
+        failure({ code: ++calls === 1 ? 1 : 2 }),
     });
-    Object.defineProperty(window, 'locationTestCalls', { get: () => calls });
   });
   await page.request.post('/api/login', {
     headers: { Origin: 'http://localhost:3011' },
     data: { password: 'browser-test-password-only' },
   });
   await page.goto('/');
-  for (const [index, status] of ['not_requested', 'denied', 'unavailable'].entries()) {
-    await page.getByRole('button', { name: 'Créer une preuve', exact: true }).click();
-    await page.getByRole('button', { name: 'Caméra', exact: true }).click();
-    const checkbox = page.getByLabel('Inclure la localisation de la prise de vue');
-    await expect(checkbox).not.toBeChecked();
-    if (index) await checkbox.check();
-    const committed = page.waitForResponse((response) =>
-      /\/api\/captures\/[^/]+\/commit$/.test(response.url()),
-    );
-    await page.getByRole('button', { name: 'Prendre la photo', exact: true }).click();
-    const response = await committed;
-    expect(response.status()).toBe(200);
-    expect((await response.json()).location.start.status).toBe(status);
-    expect(
-      await page.evaluate(
-        () => (window as unknown as { locationTestCalls: number }).locationTestCalls,
-      ),
-    ).toBe(index);
-    await page.getByRole('button', { name: 'Annuler', exact: true }).click();
+  await page.getByRole('button', { name: 'Créer une preuve', exact: true }).click();
+  await expect(page.getByLabel('Choisir une photo')).toHaveCount(0);
+  await page.getByRole('button', { name: 'Caméra', exact: true }).click();
+  let commits = 0;
+  page.on('request', (request) => {
+    if (request.url().endsWith('/commit')) commits++;
+  });
+  for (const action of ['Prendre la photo', 'Filmer une vidéo']) {
+    await page.getByRole('button', { name: action, exact: true }).click();
+    await expect(page.getByRole('alert')).toContainText('Localisation obligatoire');
+    expect(commits).toBe(0);
+    await page.getByRole('button', { name: 'Recommencer la session' }).click();
   }
 });
 
@@ -56,7 +44,6 @@ test('guided photo and video capture commit hashes, preserve declared context an
   for (const kind of ['photo', 'video']) {
     await page.getByRole('button', { name: 'Créer une preuve', exact: true }).click();
     await page.getByRole('button', { name: 'Caméra', exact: true }).click();
-    await page.getByLabel('Inclure la localisation de la prise de vue').check();
     await expect(page.getByRole('button', { name: 'Prendre la photo', exact: true })).toBeEnabled({
       timeout: 30000,
     });

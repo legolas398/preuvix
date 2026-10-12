@@ -1,3 +1,4 @@
+import { commitFixture } from './live-fixture';
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { mkdtempSync, rmSync, readFileSync, writeFileSync } from 'node:fs';
@@ -98,6 +99,16 @@ test('capture commitment is authenticated, immutable, session-bound and included
         .field('clientSha256', hash(content))
         .field('captureId', session.id)
         .attach('file', content, 'capture.jpg');
+    for (const source of ['upload', 'camera'])
+      await owner
+        .post('/api/proofs')
+        .set('Origin', origin)
+        .field('title', 'Import interdit')
+        .field('source', source)
+        .field('requestKey', randomUUID())
+        .field('clientSha256', hash(bytes))
+        .attach('file', bytes, 'import.jpg')
+        .expect(409);
     await deposit(Buffer.concat([bytes, Buffer.from('changed')])).expect(409);
     await deposit(bytes, key, 'upload').expect(409);
     const proof = (await deposit().expect(201)).body;
@@ -306,19 +317,21 @@ test('video validation decodes real MP4 and WebM, preserves bytes and rejects in
       const media = await inspectMedia(bytes);
       assert.equal(media.mime, `video/${format}`);
       assert.equal(media.provenance.result, 'inconclusive');
+      const captureId = await commitFixture(agent, origin, bytes, 'video');
       const proof = (
         await agent
           .post('/api/proofs')
           .set('Origin', origin)
           .field('title', 'Vidéo test')
-          .field('source', 'upload')
+          .field('source', 'camera')
+          .field('captureId', captureId)
           .field('requestKey', randomUUID())
           .field('clientSha256', hash(bytes))
           .attach('file', bytes, `sample.${format}`)
           .expect(201)
       ).body;
       assert.equal(proof.manifest.file.sha256, hash(bytes));
-      assert.equal(proof.manifest.certification.status, 'integrity_only');
+      assert.equal(proof.manifest.certification.status, 'capture_challenged');
       assert.ok(proof.manifest.file.durationSeconds > 0);
       assert.equal(hash(store.get(proof.id)!.original), hash(bytes));
       await agent.get(`/api/proofs/${proof.id}/report`).expect(200).expect('Content-Type', /pdf/);

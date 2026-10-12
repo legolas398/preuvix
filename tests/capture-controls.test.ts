@@ -34,6 +34,7 @@ test('capture rejects replay changes, wrong nonce, stale locations, false dates 
       endedAt: date,
       location: { start },
     };
+    assert.throws(() => service.commit(session.id, 'owner', { ...input, location: undefined }));
     assert.throws(() => service.commit(session.id, 'other-owner', input));
     assert.throws(() => service.commit(session.id, 'owner', { ...input, nonce: '0'.repeat(32) }));
     assert.throws(() =>
@@ -51,6 +52,13 @@ test('capture rejects replay changes, wrong nonce, stale locations, false dates 
         }),
       );
     assert.throws(() => service.commit(session.id, 'owner', { ...input, kind: 'video' }));
+    assert.throws(() =>
+      service.commit(session.id, 'owner', {
+        ...input,
+        kind: 'video',
+        location: { start, end: { status: 'denied' } },
+      }),
+    );
     const record = service.commit(session.id, 'owner', input);
     assert.deepEqual(service.commit(session.id, 'owner', input), record);
     assert.throws(() =>
@@ -91,13 +99,14 @@ test('capture rejects replay changes, wrong nonce, stale locations, false dates 
     );
     for (const status of ['not_requested', 'denied', 'unavailable']) {
       const next = service.issue('owner');
-      const saved = service.commit(next.id, 'owner', {
-        ...input,
-        nonce: next.nonce,
-        kind: 'video',
-        location: { start: { status }, end: { status } },
-      });
-      assert.equal(saved.location?.start.status, status);
+      assert.throws(() =>
+        service.commit(next.id, 'owner', {
+          ...input,
+          nonce: next.nonce,
+          kind: 'video',
+          location: { start: { status }, end: { status } },
+        }),
+      );
     }
     const keyFile = path.join(directory, 'attestation-ed25519.pem');
     const original = readFileSync(keyFile);

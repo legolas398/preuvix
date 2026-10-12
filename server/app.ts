@@ -459,6 +459,11 @@ export function createApp(
       return true;
     };
     if (existingResponse()) return;
+    if (source !== 'camera' || !parsed.data.captureId)
+      return void res.status(409).json({
+        error:
+          'Capture en direct avec localisation obligatoire. Les imports ne sont pas autorisés.',
+      });
     let capture: Manifest['capture'];
     try {
       if (parsed.data.captureId) {
@@ -609,12 +614,10 @@ export function createApp(
         .prepare('SELECT 1 FROM case_version_files WHERE proof_id=? LIMIT 1')
         .get(req.params.id)
     )
-      return void res
-        .status(409)
-        .json({
-          error:
-            'Cette preuve appartient à l’historique d’un dossier. Ses versions doivent être conservées.',
-        });
+      return void res.status(409).json({
+        error:
+          'Cette preuve appartient à l’historique d’un dossier. Ses versions doivent être conservées.',
+      });
     if (busy.has(req.params.id))
       return void res
         .status(409)
