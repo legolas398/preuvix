@@ -62,6 +62,7 @@ const paris = (value: string) =>
   }).format(new Date(value));
 
 async function thumbnail(proof: Proof, original: Buffer) {
+  if (proof.manifest.file.mime === 'application/pdf') return null;
   try {
     if (proof.manifest.file.mime.startsWith('image/'))
       return await sharp(original, { limitInputPixels: 40_000_000 })
@@ -395,7 +396,9 @@ export async function makeReport(proof: Proof, origin: string, original: Buffer)
     'Origine',
     manifest.capture
       ? `Capture via la caméra Preuvix (session ${manifest.capture.id.slice(0, 8)})`
-      : 'Fichier importé par le déposant',
+      : manifest.mobileEvidence?.origin === 'native_camera'
+        ? 'Photo produite par la caméra Android (déclaratif, sans défi web)'
+        : 'Fichier importé par le déposant',
   );
   doc.field(
     'Fichier',
@@ -423,11 +426,26 @@ export async function makeReport(proof: Proof, origin: string, original: Buffer)
   // ── 2. Process ──
   doc.heading('02', 'Processus de certification');
   const capture = manifest.capture;
-  doc.field('Localisation à la prise de vue', locationDescription(capture?.location?.start));
+  doc.field(
+    'Localisation déclarée à l’action',
+    locationDescription(manifest.mobileEvidence?.location ?? capture?.location?.start),
+  );
+  if (manifest.mobileEvidence) {
+    doc.field(
+      'Origine déclarée',
+      manifest.mobileEvidence.origin === 'native_camera'
+        ? 'Caméra Android — traitement JPEG possible'
+        : 'Import Android — octets reçus sans transformation par Preuvix',
+    );
+    doc.field(
+      'Heure du téléphone au lancement de l’action (non qualifiée)',
+      manifest.mobileEvidence.selectedAt,
+    );
+  }
   if (capture?.kind === 'video')
     doc.field('Localisation en fin de vidéo', locationDescription(capture.location?.end));
   doc.text(
-    'Les positions sont déclarées par le navigateur et incluses dans le manifeste signé. Leur précision est annoncée par l’appareil ; le lieu réel de la scène et le GPS ne sont pas authentifiés.',
+    'Les positions sont déclarées par le navigateur ou le téléphone et incluses dans le manifeste signé. Leur précision est annoncée par l’appareil ; le lieu réel de la scène et le GPS ne sont pas authentifiés.',
   );
   const credentials = manifest.provenance.contentCredentials;
   const checks = Object.fromEntries(
@@ -453,13 +471,17 @@ export async function makeReport(proof: Proof, origin: string, original: Buffer)
   } else
     doc.step(
       'unverified',
-      'Import d’un fichier existant',
+      manifest.mobileEvidence?.origin === 'native_camera'
+        ? 'Photo produite par la caméra Android'
+        : 'Import d’un fichier existant',
       'Aucune session de capture : l’origine du fichier est déclarée par le déposant.',
     );
   doc.step(
     'passed',
     'Réception, décodage et empreinte serveur',
-    'Le serveur a décodé intégralement le média, recalculé son SHA-256 et conservé les octets reçus sans transformation.',
+    manifest.file.mime === 'application/pdf'
+      ? 'Le serveur a lu la structure PDF, recalculé son SHA-256 et conservé les octets reçus sans transformation. Le contenu et les signatures PDF ne sont pas authentifiés.'
+      : 'Le serveur a décodé intégralement le média, recalculé son SHA-256 et conservé les octets reçus sans transformation.',
     paris(manifest.receivedAt),
   );
   doc.step(

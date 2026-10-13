@@ -1,5 +1,7 @@
 # PREUVIX
 
+Une première application Android réutilise le frontend et les services existants : [installation, compilation et limites](README_ANDROID.md). Le projet natif est dans `android/`. Ce parcours mobile ajoute les imports photo/PDF et la localisation facultative ; la capture stricte du site reste inchangée. L’accès mobile s’active côté serveur avec `MOBILE_ENABLED=true` et utilise des sessions Bearer distinctes des cookies web.
+
 Prototype privé local : capturer en direct une photo ou une vidéo avec localisation obligatoire, figer son empreinte et son contexte, signer le manifeste, exporter un dossier et comparer les fichiers. Licence MIT. Aucun paiement ni envoi professionnel dans le mode prototype, activé par défaut.
 
 La [structure des écrans et le parcours Premium](docs/parcours-premium.md) décrivent la sélection des pièces, les brouillons, les informations accessibles et les tests. `PREMIUM_TRANSMISSION_TEST=false` par défaut ; seul le serveur peut accorder cet accès de test.

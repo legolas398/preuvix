@@ -122,7 +122,9 @@ export function assessCertification(manifest: Manifest): CertificationAssessment
         result: capture ? 'passed' : 'unverified',
         detail: capture
           ? 'Fichier lié à une session et une empreinte engagée auprès du serveur.'
-          : 'Import sans session de capture vérifiée.',
+          : manifest.mobileEvidence?.origin === 'native_camera'
+            ? 'Photo produite par la caméra Android (déclaratif), sans défi de capture web vérifié. Traitement JPEG possible.'
+            : 'Import sans session de capture vérifiée.',
       },
       {
         id: 'challenge',
@@ -136,8 +138,11 @@ export function assessCertification(manifest: Manifest): CertificationAssessment
       c2paCheck,
       {
         id: 'location',
-        result: capture?.location?.start.status === 'recorded' ? 'review' : 'unverified',
-        detail: `Localisation déclarée par le navigateur : ${locationDescription(capture?.location?.start)} Le lieu réel n’est pas authentifié.`,
+        result:
+          (manifest.mobileEvidence?.location ?? capture?.location?.start)?.status === 'recorded'
+            ? 'review'
+            : 'unverified',
+        detail: `Localisation déclarée par ${manifest.mobileEvidence ? 'le téléphone' : 'le navigateur'} : ${locationDescription(manifest.mobileEvidence?.location ?? capture?.location?.start)} Le lieu réel n’est pas authentifié.`,
       },
       {
         id: 'ai_metadata',

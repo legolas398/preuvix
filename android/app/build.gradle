@@ -1,0 +1,75 @@
+apply plugin: 'com.android.application'
+
+android {
+    namespace = "fr.preuvix.app"
+    compileSdk = rootProject.ext.compileSdkVersion
+    defaultConfig {
+        applicationId "fr.preuvix.app"
+        minSdkVersion rootProject.ext.minSdkVersion
+        targetSdkVersion rootProject.ext.targetSdkVersion
+        versionCode 1
+        versionName "0.1.0"
+        testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
+        aaptOptions {
+             // Files and dirs to omit from the packaged assets dir, modified to accommodate modern web apps.
+             // Default: https://android.googlesource.com/platform/frameworks/base/+/282e181b58cf72b6ca770dc7ca5f91f135444502/tools/aapt/AaptAssets.cpp#61
+            ignoreAssetsPattern = '!.svn:!.git:!.ds_store:!*.scc:.*:!CVS:!thumbs.db:!picasa.ini:!*~'
+        }
+    }
+    buildTypes {
+        release {
+            minifyEnabled false
+            proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
+        }
+    }
+}
+
+repositories {
+    flatDir{
+        dirs '../capacitor-cordova-android-plugins/src/main/libs', 'libs'
+    }
+}
+
+dependencies {
+    implementation fileTree(include: ['*.jar'], dir: 'libs')
+    implementation "androidx.appcompat:appcompat:$androidxAppCompatVersion"
+    implementation "androidx.coordinatorlayout:coordinatorlayout:$androidxCoordinatorLayoutVersion"
+    implementation "androidx.core:core-splashscreen:$coreSplashScreenVersion"
+    implementation project(':capacitor-android')
+    testImplementation "junit:junit:$junitVersion"
+    androidTestImplementation "androidx.test.ext:junit:$androidxJunitVersion"
+    androidTestImplementation "androidx.test.espresso:espresso-core:$androidxEspressoCoreVersion"
+    implementation project(':capacitor-cordova-android-plugins')
+}
+
+apply from: 'capacitor.build.gradle'
+
+// A debug backend must never accidentally ship inside a release APK/AAB.
+tasks.register('verifyProductionBackend') {
+    doLast {
+        def metadata = file('src/main/assets/public/mobile-build.json')
+        if (!metadata.exists()) throw new GradleException('Run npm run android:build and npm run android:sync first.')
+        def build = new groovy.json.JsonSlurper().parse(metadata)
+        def uri = new URI(build.backend ?: '')
+        def host = uri.host ?: ''
+        if (build.development != false || uri.scheme != 'https' || !host.contains('.') || host == 'localhost' ||
+            host ==~ /(?i)([0-9.]+|.*:.*|.*\.(localhost|local|lan|internal|test|invalid|example))/ || uri.userInfo != null || (uri.path && uri.path != '')) {
+            throw new GradleException('Release requires a production web build with a public HTTPS backend.')
+        }
+        def capacitor = new groovy.json.JsonSlurper().parse(file('src/main/assets/capacitor.config.json'))
+        if (capacitor.server?.url || capacitor.android?.allowMixedContent == true)
+            throw new GradleException('Release forbids a remote WebView URL and mixed content.')
+    }
+}
+tasks.configureEach { task ->
+    if (task.name == 'preReleaseBuild') task.dependsOn('verifyProductionBackend')
+}
+
+try {
+    def servicesJSON = file('google-services.json')
+    if (servicesJSON.text) {
+        apply plugin: 'com.google.gms.google-services'
+    }
+} catch(Exception e) {
+    logger.info("google-services.json not found, google-services plugin not applied. Push Notifications won't work")
+}

@@ -27,6 +27,7 @@ export type Manifest = {
   source: 'upload' | 'camera';
   sourceAssurance: 'client_declared';
   capture?: CaptureRecord;
+  mobileEvidence?: import('./mobile').MobileEvidence;
   declaration?: { author: string; context: string; statement: string };
   file: {
     name: string;

@@ -1,13 +1,20 @@
 import { useState } from 'react';
 import { locationDescription, type Attestation, type CaptureRecord } from '../shared/capture';
+import type { MobileEvidence } from '../shared/mobile';
 
-export function CaptureLocation({ capture }: { capture?: CaptureRecord }) {
+export function CaptureLocation({
+  capture,
+  mobileEvidence,
+}: {
+  capture?: CaptureRecord;
+  mobileEvidence?: MobileEvidence;
+}) {
   return (
     <section className="capture-evidence" aria-label="Localisation de la capture">
       <h3>Localisation de la prise de vue</h3>
       <p>
         <strong>{capture?.kind === 'video' ? 'Début : ' : 'Position : '}</strong>
-        {locationDescription(capture?.location?.start)}
+        {locationDescription(mobileEvidence?.location ?? capture?.location?.start)}
       </p>
       {capture?.kind === 'video' && (
         <p>
@@ -16,10 +23,20 @@ export function CaptureLocation({ capture }: { capture?: CaptureRecord }) {
         </p>
       )}
       <p>
-        Les relevés enregistrés font partie du manifeste signé. Ils proviennent du navigateur : ni
-        le GPS ni le lieu réel de la scène ne sont authentifiés. Un relevé début/fin ne constitue
-        pas un suivi du trajet.
+        Les relevés enregistrés font partie du manifeste signé. Ils proviennent{' '}
+        {mobileEvidence ? 'du téléphone Android' : 'du navigateur'} : ni le GPS ni le lieu réel de
+        la scène ne sont authentifiés. Un relevé début/fin ne constitue pas un suivi du trajet.
       </p>
+      {mobileEvidence && (
+        <p>
+          Origine déclarée :{' '}
+          {mobileEvidence.origin === 'native_camera'
+            ? 'caméra Android, traitement JPEG possible'
+            : 'import, octets reçus sans transformation par Preuvix'}
+          . Heure du téléphone au lancement de l’action (non qualifiée) :{' '}
+          {mobileEvidence.selectedAt}.
+        </p>
+      )}
     </section>
   );
 }

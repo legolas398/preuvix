@@ -26,6 +26,8 @@ import { shortId } from '../shared/format';
 import { verifyPhoto } from './photo-verification';
 import { transmissionRoutes } from './transmission';
 import { createCases } from './cases';
+import { mobileTransport, inspectMobileFile } from './mobile';
+import { mobileEvidenceSchema } from '../shared/mobile';
 
 export function createApp(
   config: Config,
@@ -89,6 +91,7 @@ export function createApp(
   );
   app.use(express.json({ limit: '16kb' }));
   app.use(cookieParser());
+  mobileTransport(app, config, store);
   const cookieOptions = {
     httpOnly: true,
     secure: config.secureCookies,
@@ -101,6 +104,13 @@ export function createApp(
   let processingUploads = 0;
   const sameOrigin: RequestHandler = (req, res, next) => {
     if (['GET', 'HEAD', 'OPTIONS'].includes(req.method)) return next();
+    if (res.locals.mobileAuthorized) return next();
+    if (
+      config.mobileEnabled &&
+      req.path === '/mobile/login' &&
+      req.get('Origin') === config.mobileOrigin
+    )
+      return next();
     const localOrigins = config.production
       ? []
       : [`http://localhost:${config.port}`, `http://127.0.0.1:${config.port}`];
@@ -275,7 +285,7 @@ export function createApp(
     }
   });
   app.post(
-    '/api/login',
+    ['/api/login', '/api/mobile/login'],
     rateLimit({
       windowMs: 15 * 60_000,
       limit: 10,
@@ -283,6 +293,9 @@ export function createApp(
       message: { error: 'Trop de tentatives. Réessayez dans 15 minutes.' },
     }),
     (req, res) => {
+      const mobile = req.path === '/api/mobile/login';
+      if (mobile && (!config.mobileEnabled || req.get('Origin') !== config.mobileOrigin))
+        return void res.status(403).json({ error: 'Accès mobile non activé pour cette origine.' });
       const parsed = z.object({ password: z.string().max(256) }).safeParse(req.body);
       if (
         !parsed.success ||
@@ -297,6 +310,13 @@ export function createApp(
       store.db
         .prepare('INSERT INTO sessions VALUES (?,?)')
         .run(hash(token), Date.now() + 12 * 60 * 60_000);
+      if (mobile) {
+        store.db.prepare('INSERT INTO mobile_sessions VALUES (?)').run(hash(token));
+        return void res.json({
+          token,
+          expiresAt: new Date(Date.now() + 12 * 60 * 60_000).toISOString(),
+        });
+      }
       res
         .cookie('preuvix_session', token, { ...cookieOptions, maxAge: 12 * 60 * 60_000 })
         .json({ ok: true });
@@ -401,148 +421,181 @@ export function createApp(
     res.once('close', release);
     next();
   };
-  app.post('/api/proofs', uploadCapacity, upload.single('file'), async (req, res) => {
-    const parsed = z
-      .object({
-        title: z.string().trim().min(1).max(120),
-        description: z.string().trim().max(1500).default(''),
-        source: z.enum(['upload', 'camera']),
-        requestKey: z.uuid(),
-        clientSha256: z.string().regex(/^[a-f0-9]{64}$/),
-        captureId: z.uuid().optional(),
-        declaration: z.string().max(3000).optional(),
-      })
-      .safeParse(req.body);
-    if (!parsed.success || !req.file)
-      return void res.status(400).json({
-        error:
-          'Choisissez une photo et un titre, puis attendez le calcul SHA-256 avant de déposer.',
-      });
-    const { title, description, source, requestKey } = parsed.data;
-    let declaration: Manifest['declaration'];
-    try {
-      if (parsed.data.declaration)
-        declaration = z
-          .object({
-            author: z.string().trim().min(2).max(120),
-            context: z.string().trim().min(5).max(1200),
-            statement: z.literal(
-              'Je décris les faits de bonne foi, signale les modifications connues et conserve les éléments utiles au débat contradictoire.',
-            ),
-          })
-          .strict()
-          .parse(JSON.parse(parsed.data.declaration));
-    } catch {
-      return void res.status(400).json({ error: 'Déclaration de contexte invalide.' });
-    }
-    const fileHash = hash(req.file.buffer);
-    if (fileHash !== parsed.data.clientSha256) {
-      return void res.status(422).json({
-        error:
-          'L’empreinte reçue diffère de celle calculée dans votre navigateur. Aucun nouveau dossier n’a été créé. Sélectionnez à nouveau votre fichier.',
-      });
-    }
-    const existingResponse = () => {
-      const existing = store.byKey(requestKey);
-      if (!existing) return false;
-      const proof = store.summary(existing);
-      if (
-        proof.manifest.file.sha256 !== fileHash ||
-        proof.manifest.title !== title ||
-        proof.manifest.description !== description ||
-        proof.manifest.source !== source ||
-        proof.manifest.capture?.id !== parsed.data.captureId ||
-        JSON.stringify(proof.manifest.declaration) !== JSON.stringify(declaration)
-      )
-        res.status(409).json({ error: 'Cet identifiant de dépôt correspond à un autre contenu.' });
-      else res.json(proof);
-      return true;
-    };
-    if (existingResponse()) return;
-    if (source !== 'camera' || !parsed.data.captureId)
-      return void res.status(409).json({
-        error:
-          'Capture en direct avec localisation obligatoire. Les imports ne sont pas autorisés.',
-      });
-    let capture: Manifest['capture'];
-    try {
-      if (parsed.data.captureId) {
-        if (source !== 'camera')
-          throw new Error('Une session de capture ne peut pas être liée à un import.');
-        capture = certificates.resolve(
-          parsed.data.captureId,
-          hash(req.cookies.preuvix_session),
-          fileHash,
-        );
+  app.post(
+    ['/api/proofs', '/api/mobile/proofs'],
+    requireAuth,
+    uploadCapacity,
+    upload.single('file'),
+    async (req, res) => {
+      const mobile = req.path === '/api/mobile/proofs';
+      if (mobile && !res.locals.mobileAuthorized)
+        return void res.status(403).json({ error: 'Session mobile requise.' });
+      const parsed = z
+        .object({
+          title: z.string().trim().min(1).max(120),
+          description: z.string().trim().max(1500).default(''),
+          source: z.enum(['upload', 'camera']),
+          requestKey: z.uuid(),
+          clientSha256: z.string().regex(/^[a-f0-9]{64}$/),
+          captureId: z.uuid().optional(),
+          declaration: z.string().max(3000).optional(),
+          mobileEvidence: z.string().max(3000).optional(),
+        })
+        .safeParse(req.body);
+      if (!parsed.success || !req.file)
+        return void res.status(400).json({
+          error:
+            'Choisissez une photo et un titre, puis attendez le calcul SHA-256 avant de déposer.',
+        });
+      const { title, description, source, requestKey } = parsed.data;
+      let mobileEvidence: Manifest['mobileEvidence'];
+      try {
+        if (mobile) {
+          mobileEvidence = mobileEvidenceSchema.parse(
+            JSON.parse(parsed.data.mobileEvidence || '{}'),
+          );
+          if (
+            (source === 'camera') !== (mobileEvidence.origin === 'native_camera') ||
+            parsed.data.captureId
+          )
+            throw new Error();
+        } else if (parsed.data.mobileEvidence) throw new Error();
+      } catch {
+        return void res.status(400).json({ error: 'Provenance mobile invalide.' });
       }
-    } catch (error) {
-      return void res.status(409).json({ error: (error as Error).message });
-    }
-    let inspected;
-    try {
-      inspected = await inspectMedia(req.file.buffer);
-    } catch (error) {
-      return void res.status(400).json({ error: (error as Error).message });
-    }
-    const contentCredentials = await validateContentCredentials(
-      req.file.buffer,
-      inspected.mime,
-      config.c2paTrustAnchors,
-    );
-    // Recheck after asynchronous image decoding: another request may have completed.
-    if (existingResponse()) return;
-    if (capture && (capture.kind === 'video') !== inspected.mime.startsWith('video/'))
-      return void res
-        .status(409)
-        .json({ error: 'Le type du média ne correspond pas à la session.' });
-    const storageLimit = (await billing.refreshStatus()).maxStorageMb;
-    if (existingResponse()) return;
-    if (store.usedBytes() + req.file.size > storageLimit * 1024 * 1024)
-      return void res
-        .status(413)
-        .json({ error: 'Espace de stockage plein. Exportez et supprimez un dossier.' });
-    if (
-      capture &&
-      store.db
-        .prepare("SELECT id FROM proofs WHERE json_extract(manifest, '$.capture.id')=?")
-        .get(capture.id)
-    )
-      return void res
-        .status(409)
-        .json({ error: 'Cette capture possède déjà un dossier. Consultez vos preuves.' });
-    const id = randomUUID();
-    const manifest: Manifest = {
-      version: 1,
-      id,
-      receivedAt: new Date().toISOString(),
-      title,
-      description,
-      source,
-      sourceAssurance: 'client_declared',
-      ...(capture ? { capture } : {}),
-      ...(declaration ? { declaration } : {}),
-      file: {
-        name: req.file.originalname.replace(/[\x00-\x1f\\/]/g, '_').slice(0, 180),
-        mime: inspected.mime,
-        size: req.file.size,
-        sha256: fileHash,
-        width: inspected.width,
-        height: inspected.height,
-        ...('durationSeconds' in inspected
-          ? { durationSeconds: inspected.durationSeconds as number }
-          : {}),
-      },
-      provenance: { ...inspected.provenance, contentCredentials },
-    };
-    manifest.certification = assessCertification(manifest);
-    store.insert(manifest, req.file.buffer, requestKey, certificates.attest(manifest));
-    try {
-      await stamp(id);
-    } catch {
-      /* Saved as pending; explicitly retryable, never falsely sealed. */
-    }
-    res.status(201).json(store.summary(store.get(id)!));
-  });
+      let declaration: Manifest['declaration'];
+      try {
+        if (parsed.data.declaration)
+          declaration = z
+            .object({
+              author: z.string().trim().min(2).max(120),
+              context: z.string().trim().min(5).max(1200),
+              statement: z.literal(
+                'Je décris les faits de bonne foi, signale les modifications connues et conserve les éléments utiles au débat contradictoire.',
+              ),
+            })
+            .strict()
+            .parse(JSON.parse(parsed.data.declaration));
+      } catch {
+        return void res.status(400).json({ error: 'Déclaration de contexte invalide.' });
+      }
+      const fileHash = hash(req.file.buffer);
+      if (fileHash !== parsed.data.clientSha256) {
+        return void res.status(422).json({
+          error:
+            'L’empreinte reçue diffère de celle calculée dans votre navigateur. Aucun nouveau dossier n’a été créé. Sélectionnez à nouveau votre fichier.',
+        });
+      }
+      const existingResponse = () => {
+        const existing = store.byKey(requestKey);
+        if (!existing) return false;
+        const proof = store.summary(existing);
+        if (
+          proof.manifest.file.sha256 !== fileHash ||
+          proof.manifest.title !== title ||
+          proof.manifest.description !== description ||
+          proof.manifest.source !== source ||
+          proof.manifest.capture?.id !== parsed.data.captureId ||
+          JSON.stringify(proof.manifest.mobileEvidence) !== JSON.stringify(mobileEvidence) ||
+          JSON.stringify(proof.manifest.declaration) !== JSON.stringify(declaration)
+        )
+          res
+            .status(409)
+            .json({ error: 'Cet identifiant de dépôt correspond à un autre contenu.' });
+        else res.json(proof);
+        return true;
+      };
+      if (existingResponse()) return;
+      if (!mobile && (source !== 'camera' || !parsed.data.captureId))
+        return void res.status(409).json({
+          error:
+            'Capture en direct avec localisation obligatoire. Les imports ne sont pas autorisés.',
+        });
+      let capture: Manifest['capture'];
+      try {
+        if (parsed.data.captureId) {
+          if (source !== 'camera')
+            throw new Error('Une session de capture ne peut pas être liée à un import.');
+          capture = certificates.resolve(
+            parsed.data.captureId,
+            hash(req.cookies.preuvix_session),
+            fileHash,
+          );
+        }
+      } catch (error) {
+        return void res.status(409).json({ error: (error as Error).message });
+      }
+      let inspected;
+      try {
+        inspected = mobile
+          ? await inspectMobileFile(req.file.buffer)
+          : await inspectMedia(req.file.buffer);
+        if (mobile && source === 'camera' && !inspected.mime.startsWith('image/'))
+          throw new Error('La caméra doit produire une photo.');
+      } catch (error) {
+        return void res.status(400).json({ error: (error as Error).message });
+      }
+      const contentCredentials = await validateContentCredentials(
+        req.file.buffer,
+        inspected.mime,
+        config.c2paTrustAnchors,
+      );
+      // Recheck after asynchronous image decoding: another request may have completed.
+      if (existingResponse()) return;
+      if (capture && (capture.kind === 'video') !== inspected.mime.startsWith('video/'))
+        return void res
+          .status(409)
+          .json({ error: 'Le type du média ne correspond pas à la session.' });
+      const storageLimit = (await billing.refreshStatus()).maxStorageMb;
+      if (existingResponse()) return;
+      if (store.usedBytes() + req.file.size > storageLimit * 1024 * 1024)
+        return void res
+          .status(413)
+          .json({ error: 'Espace de stockage plein. Exportez et supprimez un dossier.' });
+      if (
+        capture &&
+        store.db
+          .prepare("SELECT id FROM proofs WHERE json_extract(manifest, '$.capture.id')=?")
+          .get(capture.id)
+      )
+        return void res
+          .status(409)
+          .json({ error: 'Cette capture possède déjà un dossier. Consultez vos preuves.' });
+      const id = randomUUID();
+      const manifest: Manifest = {
+        version: 1,
+        id,
+        receivedAt: new Date().toISOString(),
+        title,
+        description,
+        source,
+        sourceAssurance: 'client_declared',
+        ...(mobileEvidence ? { mobileEvidence } : {}),
+        ...(capture ? { capture } : {}),
+        ...(declaration ? { declaration } : {}),
+        file: {
+          name: req.file.originalname.replace(/[\x00-\x1f\\/]/g, '_').slice(0, 180),
+          mime: inspected.mime,
+          size: req.file.size,
+          sha256: fileHash,
+          width: inspected.width,
+          height: inspected.height,
+          ...('durationSeconds' in inspected
+            ? { durationSeconds: inspected.durationSeconds as number }
+            : {}),
+        },
+        provenance: { ...inspected.provenance, contentCredentials },
+      };
+      manifest.certification = assessCertification(manifest);
+      store.insert(manifest, req.file.buffer, requestKey, certificates.attest(manifest));
+      try {
+        await stamp(id);
+      } catch {
+        /* Saved as pending; explicitly retryable, never falsely sealed. */
+      }
+      res.status(201).json(store.summary(store.get(id)!));
+    },
+  );
   app.get('/api/proofs/:id', (req, res) => {
     const row = store.get(req.params.id);
     if (!row) return void res.status(404).json({ error: 'Dossier introuvable.' });
@@ -741,7 +794,7 @@ export function createApp(
     const manifest: Manifest = JSON.parse(row.manifest);
     res.setHeader(
       'Content-Disposition',
-      `inline; filename="original.${manifest.file.mime.split('/')[1]}"`,
+      `${manifest.file.mime === 'application/pdf' ? 'attachment' : 'inline'}; filename="original.${manifest.file.mime.split('/')[1]}"`,
     );
     res.type(manifest.file.mime).send(Buffer.from(row.original));
   }

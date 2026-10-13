@@ -85,6 +85,8 @@ export function readConfig(env: NodeJS.ProcessEnv = process.env) {
   if (communityContact && !/^[^\s@<>"]+@[^\s@<>"]+\.[^\s@<>"]+$/.test(communityContact))
     throw new Error('Invalid COMMUNITY_CONTACT_EMAIL.');
   return {
+    mobileEnabled: env.MOBILE_ENABLED === 'true',
+    mobileOrigin: 'https://localhost',
     evidenceServices: evidenceServiceConfig(env),
     // Local prototype only. Never derives Premium rights from browser state or billing.
     premiumTransmissionTest: !production && env.PREMIUM_TRANSMISSION_TEST === 'true',

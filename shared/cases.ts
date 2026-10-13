@@ -21,6 +21,7 @@ export type CaseFile = {
   manifestHash: string;
   file: Manifest['file'];
   capture: CaptureRecord | null;
+  mobileEvidence?: Manifest['mobileEvidence'];
 };
 export type CaseManifest = CaseInput & {
   schema: 'preuvix-case/1';

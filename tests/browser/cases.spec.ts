@@ -29,6 +29,8 @@ test('multi-file dossier preserves versions, verifies originals, exports and rev
   async function capture(title: string) {
     await page.getByRole('button', { name: 'Capturer une photo ou vidéo', exact: true }).click();
     await page.getByRole('button', { name: 'Caméra', exact: true }).click();
+    // Refresh the emulated reading for each action: real captures reject positions older than 30 s.
+    await page.context().setGeolocation({ latitude: 48.8566, longitude: 2.3522, accuracy: 15 });
     await page.getByRole('button', { name: 'Prendre la photo', exact: true }).click();
     await page.locator('#proof-title').fill(title);
     const saved = page.waitForResponse(

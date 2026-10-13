@@ -8,6 +8,12 @@
     "node": ">=24.0.0"
   },
   "scripts": {
+    "android:build:dev": "tsc --noEmit && vite build --config vite.android.config.ts --mode android-development",
+    "android:build": "tsc --noEmit && vite build --config vite.android.config.ts --mode android",
+    "android:sync": "cap sync android",
+    "android:open": "cap open android",
+    "android:run": "cap run android",
+    "test:android": "playwright test --config playwright.android.config.ts",
     "setup": "node scripts/setup.mjs",
     "key:rotate": "node scripts/rotate-key.mjs",
     "timestamp:check": "tsx scripts/check-timestamp.ts",
@@ -21,6 +27,14 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "@capacitor/android": "^8.5.3",
+    "@capacitor/app": "^8.1.2",
+    "@capacitor/camera": "^8.2.5",
+    "@capacitor/core": "^8.5.3",
+    "@capacitor/filesystem": "^8.1.4",
+    "@capacitor/geolocation": "^8.2.3",
+    "@capacitor/share": "^8.0.3",
+    "@capawesome/capacitor-file-picker": "^8.1.0",
     "@contentauth/c2pa-node": "^0.9.9",
     "@fontsource/manrope": "^5.3.0",
     "@fontsource/newsreader": "^5.3.0",
@@ -51,6 +65,7 @@
     "zod": "^4.0.0"
   },
   "devDependencies": {
+    "@capacitor/cli": "^8.5.3",
     "@playwright/test": "^1.63.0",
     "@types/cookie-parser": "^1.4.9",
     "@types/express": "^5.0.3",

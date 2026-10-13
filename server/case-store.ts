@@ -234,6 +234,9 @@ export function caseStore(store: Store, attest: (manifest: object) => Attestatio
           manifestHash: proof.manifestHash,
           file: proof.manifest.file,
           capture: proof.manifest.capture ?? null,
+          ...(proof.manifest.mobileEvidence
+            ? { mobileEvidence: proof.manifest.mobileEvidence }
+            : {}),
         };
         return {
           ...current,

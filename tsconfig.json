@@ -20,6 +20,9 @@
     "tests",
     "scripts",
     "vite.config.ts",
+    "vite.android.config.ts",
+    "capacitor.config.ts",
+    "playwright.android.config.ts",
     "playwright.config.ts"
   ]
 }

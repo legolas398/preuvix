@@ -98,7 +98,8 @@ function EvidenceFiles({
             <li>Empreinte calculée · SHA-256</li>
             <li>Date de réception disponible · serveur UTC</li>
             <li>
-              {file.capture?.location?.start.status === 'recorded'
+              {(file.mobileEvidence?.location ?? file.capture?.location?.start)?.status ===
+              'recorded'
                 ? 'Localisation renseignée · position capturée'
                 : 'Localisation non renseignée'}
             </li>
@@ -134,7 +135,10 @@ function EvidenceFiles({
           {file.supersedes && <p>Version précédente conservée dans l’historique du dossier.</p>}
           <details>
             <summary>Informations de localisation</summary>
-            <CaptureLocation capture={file.capture ?? undefined} />
+            <CaptureLocation
+              capture={file.capture ?? undefined}
+              mobileEvidence={file.mobileEvidence}
+            />
           </details>
           <details>
             <summary>Vérifier une copie de ce fichier</summary>

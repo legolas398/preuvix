@@ -59,9 +59,23 @@ export async function caseReport(detail: CaseDetail) {
     line(`Réception serveur UTC : ${file.receivedAt}`);
     line(`Fichier enregistré · empreinte SHA-256 calculée : ${file.file.sha256}`);
     line(`Manifeste du fichier : ${file.manifestHash}`);
-    line(
-      `Position capturée (source : navigateur) : ${locationDescription(file.capture?.location?.start)}`,
-    );
+    if (file.mobileEvidence) {
+      const mobile = file.mobileEvidence;
+      line(
+        `Origine déclarée : ${mobile.origin === 'native_camera' ? 'caméra Android' : 'sélecteur de fichiers Android'}.`,
+      );
+      line(`Heure du téléphone (non qualifiée) : ${mobile.selectedAt}`);
+      line(
+        `Transformation : ${mobile.transformation === 'none_by_preuvix' ? 'aucune par Preuvix' : 'JPEG produit par la caméra / le plugin, traitement possible'}.`,
+      );
+      line(
+        `Localisation déclarative (${mobile.location.status === 'recorded' ? mobile.location.source : 'sans position'}) : ${locationDescription(mobile.location)}`,
+      );
+    }
+    if (!file.mobileEvidence)
+      line(
+        `Position capturée (source : navigateur) : ${locationDescription(file.capture?.location?.start)}`,
+      );
     if (file.capture?.kind === 'video')
       line(`Fin de vidéo : ${locationDescription(file.capture.location?.end)}`);
     if (file.supersedes) line(`Version précédente conservée : ${file.supersedes}`);

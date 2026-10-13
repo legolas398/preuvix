@@ -531,7 +531,9 @@ function Workspace({ config, onLogout }: { config: AppConfig; onLogout: () => Pr
                         onClick={() => setSelected(proof)}
                       >
                         <div className="file-cell">
-                          {proof.manifest.file.mime.startsWith('video/') ? (
+                          {proof.manifest.file.mime === 'application/pdf' ? (
+                            <span aria-label="Document PDF">PDF</span>
+                          ) : proof.manifest.file.mime.startsWith('video/') ? (
                             <span aria-label="Vidéo">▶</span>
                           ) : (
                             <img src={`/api/proofs/${proof.id}/original`} alt="" loading="lazy" />
@@ -1018,7 +1020,9 @@ function ProofDetail({
       <h2 id="documents">Documents</h2>
       <div className="detail-layout">
         <div className="detail-image">
-          {proof.manifest.file.mime.startsWith('video/') ? (
+          {proof.manifest.file.mime === 'application/pdf' ? (
+            <a href={`/api/proofs/${proof.id}/original`}>Télécharger le document PDF original</a>
+          ) : proof.manifest.file.mime.startsWith('video/') ? (
             <video
               src={`/api/proofs/${proof.id}/original`}
               controls
@@ -1041,7 +1045,11 @@ function ProofDetail({
           <div>
             <span>Source déclarée</span>
             <strong>
-              {proof.manifest.source === 'camera' ? 'Caméra du navigateur' : 'Fichier importé'}
+              {proof.manifest.mobileEvidence?.origin === 'native_camera'
+                ? 'Caméra Android (déclaratif)'
+                : proof.manifest.source === 'camera'
+                  ? 'Caméra du navigateur'
+                  : 'Fichier importé'}
             </strong>
             <small>Origine non authentifiée</small>
           </div>
@@ -1061,7 +1069,10 @@ function ProofDetail({
         <p className="detail-description">{proof.manifest.description}</p>
       )}
       <h2 id="controle">Vérification</h2>
-      <CaptureLocation capture={proof.manifest.capture} />
+      <CaptureLocation
+        capture={proof.manifest.capture}
+        mobileEvidence={proof.manifest.mobileEvidence}
+      />
       <SignatureControl attestation={proof.attestation} />
       <div className="hash-box">
         <span>
