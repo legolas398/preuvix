@@ -61,6 +61,7 @@ export type Proof = {
   receipt: TimestampReceipt | null;
   events: { at: string; kind: string }[];
   shareToken: string | null;
+  verificationLink?: { expiresAt: string; includeLocation: boolean } | null;
   attestation?: Attestation;
   reviews?: import('./capture').SignedReview[];
   watermarked?: boolean;
@@ -87,6 +88,9 @@ export type RecipientDossier = {
 };
 
 export type PublicProof = {
+  expiresAt?: string | null;
+  location?: import('./capture').LocationSample;
+  signatureVerified?: boolean;
   id: string;
   fileHash: string;
   manifestHash: string;

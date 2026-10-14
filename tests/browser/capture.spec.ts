@@ -38,7 +38,9 @@ test('photo recovers from encoding failure and silent GPS without freezing', asy
   await context.grantPermissions(['camera', 'geolocation']);
   await page.addInitScript(() => {
     let silent = true;
-    window.addEventListener('test-gps-ready', () => { silent = false; });
+    window.addEventListener('test-gps-ready', () => {
+      silent = false;
+    });
     Object.defineProperty(navigator.geolocation, 'getCurrentPosition', {
       value: (success: PositionCallback) => {
         if (silent) return;
@@ -125,6 +127,10 @@ test('guided photo and video capture commit hashes, preserve declared context an
     await page.getByRole('button', { name: 'Conserver ma preuve' }).click();
     const response = await deposited;
     expect(response.status()).toBe(201);
+    await expect(
+      page.getByRole('heading', { name: 'Preuve enregistrée sur le serveur' }),
+    ).toBeVisible();
+    await page.getByRole('button', { name: 'Ouvrir la preuve enregistrée' }).click();
     const proof = await response.json();
     expect(proof.manifest.capture.kind).toBe(kind);
     expect(proof.manifest.capture.location.start.status).toBe('recorded');

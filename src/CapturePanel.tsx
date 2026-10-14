@@ -46,6 +46,17 @@ export default function CapturePanel({
   const timer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const [session, setSession] = useState<CaptureSession | null>(null);
   const [error, setError] = useState('');
+  const [recovery, setRecovery] = useState<File | null>(null);
+  const [recoveryUrl, setRecoveryUrl] = useState('');
+  useEffect(() => {
+    if (!recovery) {
+      setRecoveryUrl('');
+      return;
+    }
+    const url = URL.createObjectURL(recovery);
+    setRecoveryUrl(url);
+    return () => URL.revokeObjectURL(url);
+  }, [recovery]);
   const [ready, setReady] = useState(false);
   const [busy, setBusy] = useState(false);
   const [progress, setProgress] = useState('');
@@ -167,6 +178,7 @@ export default function CapturePanel({
     startLocation: LocationSample,
   ) {
     if (!session || !alive.current) return;
+    setRecovery(file);
     setBusy(true);
     setError('');
     try {
@@ -387,6 +399,15 @@ export default function CapturePanel({
       )}
       {progress && <p role="status">{progress}</p>}
       {error && <p role="alert">{error}</p>}
+      {error && recoveryUrl && (
+        <p>
+          La capture reste disponible dans cette fenêtre.{' '}
+          <a href={recoveryUrl} download={recovery?.name}>
+            Télécharger la capture de secours
+          </a>
+          . Son enregistrement sur le serveur n’est pas confirmé.
+        </p>
+      )}
       <div className="button-row">
         <button className="button secondary" onClick={close}>
           Annuler

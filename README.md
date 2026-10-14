@@ -10,6 +10,8 @@ La [structure des écrans et le parcours Premium](docs/parcours-premium.md) déc
 
 ## Capture documentée et attestation
 
+Le [mode d’emploi des dossiers, brouillons et liens de vérification](docs/parcours-preuve-et-partage.md) détaille la reprise après un échec d’envoi, les cinq contrôles de preuve et le partage expirant avec localisation facultative.
+
 Le [protocole de capture et de certification technique](docs/capture-certification.md) décrit les sessions engagées, la vidéo, la signature Ed25519, le PDF imprimable, les garanties et les limites anti-IA. Les nouveaux dossiers sont signés par la clé propre à l’installation ; les anciens dossiers restent lisibles sans signature rétroactive. L’identité du déposant et la réalité de la scène ne sont pas certifiées. L’horodatage indépendant reste en attente tant qu’un prestataire n’est pas configuré.
 
 En développement, le serveur accepte aussi les origines exactes `http://localhost:PORT` et `http://127.0.0.1:PORT` pour permettre la capture sur le poste même lorsque `APP_ORIGIN` utilise une IP du réseau. En production, seule `APP_ORIGIN` est acceptée. Les caméras des autres appareils exigent une adresse HTTPS de confiance.

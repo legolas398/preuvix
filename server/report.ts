@@ -614,6 +614,11 @@ export async function makeReport(proof: Proof, origin: string, original: Buffer)
       height: qrSize,
     });
     doc.y = Math.min(doc.y, verifyTop - qrSize - 8);
+    if (proof.verificationLink)
+      doc.text(
+        `Lien valable jusqu’au ${proof.verificationLink.expiresAt}. Localisation ${proof.verificationLink.includeLocation ? 'visible' : 'masquée'} sur la page. Le propriétaire peut révoquer ce lien.`,
+        { size: 8 },
+      );
   }
 
   // ── Final Preuvix certificate block ──

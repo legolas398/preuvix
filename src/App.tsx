@@ -31,6 +31,10 @@ import {
   Github,
   Info,
 } from 'lucide-react';
+import ProofSummary from './ProofSummary';
+import DraftNotice from './DraftNotice';
+import { readDraft, saveDraft, deleteDraft } from './web-draft';
+import { locationDescription } from '../shared/capture';
 import type { AppConfig, Proof, PublicProof } from '../shared/types';
 import { certificationLabels } from '../shared/certification-policy';
 import ChallengeReview from './ChallengeReview';
@@ -438,6 +442,14 @@ function Workspace({ config, onLogout }: { config: AppConfig; onLogout: () => Pr
           </div>
         </header>
         <main className="main-content">
+          {!creating && (
+            <DraftNotice
+              resume={() => {
+                caseCapture.current = null;
+                setCreating(true);
+              }}
+            />
+          )}
           {error && <Notice danger>{error}</Notice>}
           {selected ? (
             <ProofDetail
@@ -673,7 +685,88 @@ function CreateProof({
   const [declared, setDeclared] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
-  const key = useRef(crypto.randomUUID());
+  const key = useRef<string>(crypto.randomUUID());
+  const [draftReady, setDraftReady] = useState(false);
+  const [draftStatus, setDraftStatus] = useState('Recherche d’un brouillon local…');
+  const [savedProof, setSavedProof] = useState<Proof | null>(null);
+  const draftQueue = useRef<Promise<unknown>>(Promise.resolve());
+  const submitted = useRef(false);
+  useEffect(() => {
+    let active = true;
+    readDraft()
+      .then((draft) => {
+        if (!active) return;
+        if (draft) {
+          setFile(draft.file);
+          setSource('camera');
+          setCaptureId(draft.captureId);
+          setTitle(draft.title);
+          setDescription(draft.description);
+          setAuthor(draft.author);
+          setContext(draft.context);
+          setDeclared(draft.declared);
+          key.current = draft.requestKey;
+          setDraftStatus(
+            'Brouillon retrouvé sur cet appareil. Vérifiez l’aperçu puis réessayez le dépôt.',
+          );
+        } else setDraftStatus('Aucune capture locale en attente.');
+      })
+      .catch(() => {
+        if (active)
+          setDraftStatus(
+            'Stockage local indisponible : gardez cette fenêtre ouverte jusqu’au dépôt.',
+          );
+      })
+      .finally(() => {
+        if (active) setDraftReady(true);
+      });
+    return () => {
+      active = false;
+    };
+  }, []);
+  useEffect(() => {
+    if (!draftReady || !file || submitted.current) return;
+    let active = true;
+    setDraftStatus('Enregistrement du brouillon sur cet appareil…');
+    const draft = {
+      file,
+      captureId,
+      title,
+      description,
+      author,
+      context,
+      declared,
+      requestKey: key.current,
+      savedAt: new Date().toISOString(),
+    };
+    draftQueue.current = draftQueue.current.catch(() => {}).then(() => saveDraft(draft));
+    void draftQueue.current.then(
+      () => {
+        if (active)
+          setDraftStatus(
+            'Brouillon enregistré sur cet appareil uniquement. Le fichier n’est pas encore confirmé sur le serveur.',
+          );
+      },
+      () => {
+        if (active)
+          setDraftStatus(
+            'Échec de sauvegarde locale. Gardez cette fenêtre ouverte et réessayez le dépôt.',
+          );
+      },
+    );
+    return () => {
+      active = false;
+    };
+  }, [draftReady, file, captureId, title, description, author, context, declared]);
+  useEffect(() => {
+    if (!file || savedProof) return;
+    const warn = (event: BeforeUnloadEvent) => {
+      event.preventDefault();
+      event.returnValue = '';
+    };
+    window.addEventListener('beforeunload', warn);
+    return () => window.removeEventListener('beforeunload', warn);
+  }, [file, savedProof]);
   useEffect(() => {
     let cancelled = false;
     setFileHash('');
@@ -758,7 +851,20 @@ function CreateProof({
         }),
       );
     try {
-      await onCreated(await api<Proof>('/api/proofs', { method: 'POST', body }));
+      const proof = await api<Proof>('/api/proofs', {
+        method: 'POST',
+        body,
+        signal: AbortSignal.timeout(90000),
+      });
+      submitted.current = true;
+      await draftQueue.current.catch(() => {});
+      try {
+        await deleteDraft();
+        setDraftStatus('Le brouillon local a été supprimé après confirmation du serveur.');
+      } catch {
+        setDraftStatus('Dépôt réussi, mais le brouillon local n’a pas pu être supprimé.');
+      }
+      setSavedProof(proof);
     } catch (e) {
       setError((e as Error).message);
     } finally {
@@ -769,200 +875,303 @@ function CreateProof({
     <Modal
       title="Créer une preuve"
       close={() => {
-        if (!busy) close();
+        if (!busy) {
+          if (savedProof) {
+            setBusy(true);
+            void onCreated(savedProof)
+              .catch((e) => setError(e.message))
+              .finally(() => setBusy(false));
+          } else close();
+        }
       }}
     >
       <p className="modal-subtitle">
         Capturez en direct une photo ou une vidéo avec sa localisation, documentez les faits et
         obtenez votre attestation technique PDF.
       </p>
-      {camera ? (
-        <CapturePanel
-          close={() => setCamera(false)}
-          onCapture={(f, id) => choose(f, 'camera', id)}
-        />
+      {savedProof ? (
+        <section className="capture-storage" role="status">
+          <h2>Preuve enregistrée sur le serveur</h2>
+          <p>
+            {savedProof.manifest.title} · reçue le {date(savedProof.manifest.receivedAt)}.
+          </p>
+          <p>{draftStatus}</p>
+          <p>
+            {savedProof.receipt
+              ? 'Horodatage externe obtenu.'
+              : 'Horodatage externe non obtenu ; le fichier est bien conservé.'}
+          </p>
+          <button
+            className="button primary"
+            disabled={busy}
+            onClick={async () => {
+              setBusy(true);
+              try {
+                await onCreated(savedProof);
+              } catch (e) {
+                setError((e as Error).message);
+              } finally {
+                setBusy(false);
+              }
+            }}
+          >
+            Ouvrir la preuve enregistrée
+          </button>
+          {error && <p role="alert">{error}</p>}
+        </section>
       ) : (
-        <form onSubmit={submit}>
-          <fieldset disabled={busy}>
-            <div
-              className="upload-zone"
-              onDragOver={(e) => e.preventDefault()}
-              onDrop={(e) => {
-                e.preventDefault();
-                if (!busy)
-                  setError('Les imports sont désactivés. Utilisez la caméra avec la localisation.');
-              }}
-            >
-              {preview ? (
-                <>
-                  {file?.type.startsWith('video/') ? (
-                    <video className="upload-preview" src={preview} controls playsInline />
-                  ) : (
-                    <img
-                      className="upload-preview"
-                      src={preview}
-                      alt="Aperçu du fichier sélectionné"
-                    />
-                  )}
-                  <span>
-                    {file?.name} · {size(file?.size || 0)}
-                  </span>
-                </>
-              ) : (
-                <>
-                  <div className="round-icon">
-                    <Upload size={25} />
-                  </div>
-                  <h3>Capturez votre photo ou vidéo en direct</h3>
-                  <p>Caméra et localisation obligatoires. Vidéo : 60 secondes maximum.</p>
-                </>
-              )}
-              <div className="button-row">
-                <button type="button" className="button secondary" onClick={() => setCamera(true)}>
-                  <Camera size={16} /> Caméra
-                </button>
-              </div>
-            </div>
-            <p className="phone-format-help">
-              Autorisez la caméra et la localisation dans votre navigateur pour créer une preuve.
+        <>
+          <ol className="capture-steps" aria-label="Étapes de création">
+            <li aria-current={!file ? 'step' : undefined}>Localisation et caméra</li>
+            <li aria-current={file && !busy ? 'step' : undefined}>Aperçu et description</li>
+            <li aria-current={busy ? 'step' : undefined}>Enregistrement serveur</li>
+          </ol>
+          <section className="capture-storage" aria-label="État de sauvegarde">
+            <p>{draftStatus}</p>
+            <p>
+              Un brouillon reste dans ce navigateur, accessible aux utilisateurs de ce profil.
+              Déposez-le dans les 24 heures avec la même session de connexion. Une session expirée
+              peut nécessiter une nouvelle capture. Effacer les données du navigateur supprime le
+              brouillon.
             </p>
-            {hashing && (
-              <div className="hash-progress" role="status">
-                <Spinner /> Calcul de l’empreinte sur votre appareil…
-              </div>
-            )}
-            {fileHash && (
-              <div className="hash-box" aria-label="Empreinte avant dépôt">
-                <span>
-                  <Fingerprint size={16} /> SHA-256 CALCULÉ AVANT L’ENVOI
-                </span>
-                <code>{fileHash}</code>
-                <p>
-                  Le serveur recalculera cette empreinte. Le dépôt sera refusé si les résultats
-                  diffèrent. Le fichier n’a pas encore été envoyé.
-                </p>
-              </div>
-            )}
-            <label htmlFor="proof-title">
-              Titre du dossier <span>*</span>
-            </label>
-            <input
-              id="proof-title"
-              required
-              maxLength={120}
-              value={title}
-              onChange={(e) => {
-                key.current = crypto.randomUUID();
-                setTitle(e.target.value);
-              }}
-              placeholder="Ex. État du mur avant travaux"
-            />
-            <label htmlFor="proof-description">
-              Contexte <small>facultatif</small>
-            </label>
-            <textarea
-              id="proof-description"
-              rows={3}
-              maxLength={1500}
-              value={description}
-              onChange={(e) => {
-                key.current = crypto.randomUUID();
-                setDescription(e.target.value);
-              }}
-              placeholder="Décrivez ce que vous souhaitez documenter…"
-            />
-            <div className="privacy-hint">
-              <LockKeyhole size={15} />
-              <span>
-                Privé par défaut. La localisation obligatoire est conservée avec la capture et
-                incluse dans ses exports. L’original peut aussi contenir ses propres métadonnées.
-              </span>
-            </div>
-            <details className="capture-declaration">
-              <summary>Déclarations complémentaires (facultatives)</summary>
-              {captureId && (
-                <p>
-                  Empreinte engagée auprès du serveur. Déposez ce média dans les 24 heures.
-                  L’identité de l’auteur et la réalité de la scène ne sont pas vérifiées.
-                </p>
-              )}
-              <label htmlFor="declared-author">Auteur déclaré (facultatif)</label>
-              <input
-                id="declared-author"
-                maxLength={120}
-                value={author}
-                onChange={(e) => {
-                  setAuthor(e.target.value);
-                  key.current = crypto.randomUUID();
-                }}
-              />
-              <label htmlFor="declared-context">
-                Lieu, circonstances et modifications connues (facultatif)
-              </label>
-              <textarea
-                id="declared-context"
-                maxLength={1200}
-                rows={3}
-                value={context}
-                onChange={(e) => {
-                  setContext(e.target.value);
-                  key.current = crypto.randomUUID();
-                }}
-                placeholder="Distinguez ce que vous avez observé de vos interprétations. Signalez tout montage, filtre ou usage d’IA connu."
-              />
-              <label className="capture-check">
-                <input
-                  type="checkbox"
-                  checked={declared}
-                  onChange={(e) => {
-                    setDeclared(e.target.checked);
-                    key.current = crypto.randomUUID();
-                  }}
-                />{' '}
-                Je décris les faits de bonne foi, signale les modifications connues et conserve les
-                éléments utiles au débat contradictoire.
-              </label>
-              <p>
-                Ces déclarations sont ajoutées au manifeste signé uniquement si vous cochez la case
-                et complétez les deux champs. Aucun score « sans IA » ni garantie de recevabilité
-                n’est délivré.
-              </p>
-            </details>
-            {!config.timestampConfigured && (
-              <Notice>
-                Le fichier sera conservé <strong>en attente d’horodatage</strong>. Le prestataire
-                indépendant n’est pas encore configuré.
-              </Notice>
-            )}
-            {error && <Notice danger>{error}</Notice>}
-            <div className="modal-actions">
-              <button type="button" className="button secondary" onClick={close}>
-                Annuler
-              </button>
+            {file && (
               <button
-                className="button primary"
-                disabled={
-                  !file ||
-                  !fileHash ||
-                  hashing ||
-                  !title.trim() ||
-                  busy ||
-                  (declared && (author.trim().length < 2 || context.trim().length < 5))
-                }
+                type="button"
+                className="button secondary"
+                disabled={busy}
+                onClick={async () => {
+                  const url = URL.createObjectURL(file);
+                  const link = document.createElement('a');
+                  link.href = url;
+                  link.download = file.name;
+                  link.click();
+                  setTimeout(() => URL.revokeObjectURL(url), 1000);
+                }}
               >
-                {busy ? (
-                  <>
-                    <Spinner /> Dépôt et vérification…
-                  </>
-                ) : (
-                  <>
-                    <Plus size={17} /> Conserver ma preuve
-                  </>
-                )}
+                Télécharger ma capture locale
               </button>
-            </div>
-          </fieldset>
-        </form>
+            )}
+            {file && (
+              <button
+                type="button"
+                className="button secondary"
+                disabled={busy}
+                onClick={async () => {
+                  setBusy(true);
+                  try {
+                    await draftQueue.current.catch(() => {});
+                    await deleteDraft();
+                    setFile(null);
+                    setCaptureId('');
+                    setDraftStatus('Brouillon local supprimé.');
+                  } catch {
+                    setError('Impossible de supprimer le brouillon.');
+                  } finally {
+                    setBusy(false);
+                  }
+                }}
+              >
+                Supprimer le brouillon local
+              </button>
+            )}
+          </section>
+          {camera ? (
+            <CapturePanel
+              close={() => setCamera(false)}
+              onCapture={(f, id) => choose(f, 'camera', id)}
+            />
+          ) : (
+            <form onSubmit={submit}>
+              <fieldset disabled={busy || !draftReady}>
+                <div
+                  className="upload-zone"
+                  onDragOver={(e) => e.preventDefault()}
+                  onDrop={(e) => {
+                    e.preventDefault();
+                    if (!busy)
+                      setError(
+                        'Les imports sont désactivés. Utilisez la caméra avec la localisation.',
+                      );
+                  }}
+                >
+                  {preview ? (
+                    <>
+                      {file?.type.startsWith('video/') ? (
+                        <video className="upload-preview" src={preview} controls playsInline />
+                      ) : (
+                        <img
+                          className="upload-preview"
+                          src={preview}
+                          alt="Aperçu du fichier sélectionné"
+                        />
+                      )}
+                      <span>
+                        {file?.name} · {size(file?.size || 0)}
+                      </span>
+                    </>
+                  ) : (
+                    <>
+                      <div className="round-icon">
+                        <Upload size={25} />
+                      </div>
+                      <h3>Capturez votre photo ou vidéo en direct</h3>
+                      <p>Caméra et localisation obligatoires. Vidéo : 60 secondes maximum.</p>
+                    </>
+                  )}
+                  <div className="button-row">
+                    <button
+                      type="button"
+                      className="button secondary"
+                      onClick={() => setCamera(true)}
+                    >
+                      <Camera size={16} /> Caméra
+                    </button>
+                  </div>
+                </div>
+                <p className="phone-format-help">
+                  Autorisez la caméra et la localisation dans votre navigateur pour créer une
+                  preuve.
+                </p>
+                {hashing && (
+                  <div className="hash-progress" role="status">
+                    <Spinner /> Calcul de l’empreinte sur votre appareil…
+                  </div>
+                )}
+                {fileHash && (
+                  <div className="hash-box" aria-label="Empreinte avant dépôt">
+                    <span>
+                      <Fingerprint size={16} /> SHA-256 CALCULÉ AVANT L’ENVOI
+                    </span>
+                    <code>{fileHash}</code>
+                    <p>
+                      Le serveur recalculera cette empreinte. Le dépôt sera refusé si les résultats
+                      diffèrent. Le fichier n’a pas encore été envoyé.
+                    </p>
+                  </div>
+                )}
+                <label htmlFor="proof-title">
+                  Titre du dossier <span>*</span>
+                </label>
+                <input
+                  id="proof-title"
+                  required
+                  maxLength={120}
+                  value={title}
+                  onChange={(e) => {
+                    key.current = crypto.randomUUID();
+                    setTitle(e.target.value);
+                  }}
+                  placeholder="Ex. État du mur avant travaux"
+                />
+                <label htmlFor="proof-description">
+                  Contexte <small>facultatif</small>
+                </label>
+                <textarea
+                  id="proof-description"
+                  rows={3}
+                  maxLength={1500}
+                  value={description}
+                  onChange={(e) => {
+                    key.current = crypto.randomUUID();
+                    setDescription(e.target.value);
+                  }}
+                  placeholder="Décrivez ce que vous souhaitez documenter…"
+                />
+                <div className="privacy-hint">
+                  <LockKeyhole size={15} />
+                  <span>
+                    Privé par défaut. La localisation obligatoire est conservée avec la capture et
+                    incluse dans ses exports. L’original peut aussi contenir ses propres
+                    métadonnées.
+                  </span>
+                </div>
+                <details className="capture-declaration">
+                  <summary>Déclarations complémentaires (facultatives)</summary>
+                  {captureId && (
+                    <p>
+                      Empreinte engagée auprès du serveur. Déposez ce média dans les 24 heures.
+                      L’identité de l’auteur et la réalité de la scène ne sont pas vérifiées.
+                    </p>
+                  )}
+                  <label htmlFor="declared-author">Auteur déclaré (facultatif)</label>
+                  <input
+                    id="declared-author"
+                    maxLength={120}
+                    value={author}
+                    onChange={(e) => {
+                      setAuthor(e.target.value);
+                      key.current = crypto.randomUUID();
+                    }}
+                  />
+                  <label htmlFor="declared-context">
+                    Lieu, circonstances et modifications connues (facultatif)
+                  </label>
+                  <textarea
+                    id="declared-context"
+                    maxLength={1200}
+                    rows={3}
+                    value={context}
+                    onChange={(e) => {
+                      setContext(e.target.value);
+                      key.current = crypto.randomUUID();
+                    }}
+                    placeholder="Distinguez ce que vous avez observé de vos interprétations. Signalez tout montage, filtre ou usage d’IA connu."
+                  />
+                  <label className="capture-check">
+                    <input
+                      type="checkbox"
+                      checked={declared}
+                      onChange={(e) => {
+                        setDeclared(e.target.checked);
+                        key.current = crypto.randomUUID();
+                      }}
+                    />{' '}
+                    Je décris les faits de bonne foi, signale les modifications connues et conserve
+                    les éléments utiles au débat contradictoire.
+                  </label>
+                  <p>
+                    Ces déclarations sont ajoutées au manifeste signé uniquement si vous cochez la
+                    case et complétez les deux champs. Aucun score « sans IA » ni garantie de
+                    recevabilité n’est délivré.
+                  </p>
+                </details>
+                {!config.timestampConfigured && (
+                  <Notice>
+                    Le fichier sera conservé <strong>en attente d’horodatage</strong>. Le
+                    prestataire indépendant n’est pas encore configuré.
+                  </Notice>
+                )}
+                {error && <Notice danger>{error}</Notice>}
+                <div className="modal-actions">
+                  <button type="button" className="button secondary" onClick={close}>
+                    Annuler
+                  </button>
+                  <button
+                    className="button primary"
+                    disabled={
+                      !file ||
+                      !fileHash ||
+                      hashing ||
+                      !title.trim() ||
+                      busy ||
+                      (declared && (author.trim().length < 2 || context.trim().length < 5))
+                    }
+                  >
+                    {busy ? (
+                      <>
+                        <Spinner /> Dépôt et vérification…
+                      </>
+                    ) : (
+                      <>
+                        <Plus size={17} /> {error ? 'Réessayer le dépôt' : 'Conserver ma preuve'}
+                      </>
+                    )}
+                  </button>
+                </div>
+              </fieldset>
+            </form>
+          )}
+        </>
       )}
     </Modal>
   );
@@ -988,6 +1197,8 @@ function ProofDetail({
   const [deleting, setDeleting] = useState(false);
   const [confirmation, setConfirmation] = useState('');
   const [copied, setCopied] = useState(false);
+  const [shareDays, setShareDays] = useState(7);
+  const [shareLocation, setShareLocation] = useState(false);
   const act = async (action: () => Promise<void>) => {
     setBusy(true);
     setError('');
@@ -1017,6 +1228,7 @@ function ProofDetail({
         <span>{shortId(proof.id)}</span>
         <Status proof={proof} />
       </div>
+      <ProofSummary proof={proof} />
       <h2 id="documents">Documents</h2>
       <div className="detail-layout">
         <div className="detail-image">
@@ -1229,6 +1441,44 @@ function ProofDetail({
             Le lien révèle les empreintes et le statut d’horodatage, sans exposer la photo ni sa
             description. Toute personne ayant ce lien peut le consulter.
           </p>
+          <p>
+            La localisation reste masquée par défaut. Le PDF téléchargé après activation contient un
+            QR code vers ce lien. Le lien ne donne pas accès aux originaux. La révocation ne
+            supprime pas les copies déjà téléchargées.
+          </p>
+          {!proof.shareToken && (
+            <div className="workspace-filters">
+              <label>
+                Expiration du lien
+                <select value={shareDays} onChange={(e) => setShareDays(Number(e.target.value))}>
+                  <option value={7}>7 jours</option>
+                  <option value={30}>30 jours</option>
+                  <option value={90}>90 jours</option>
+                </select>
+              </label>
+              <label>
+                <input
+                  type="checkbox"
+                  checked={shareLocation}
+                  onChange={(e) => setShareLocation(e.target.checked)}
+                />
+                Afficher la localisation déclarée (coordonnées, précision et heure du relevé)
+              </label>
+            </div>
+          )}
+          {proof.verificationLink && (
+            <p>
+              Expire le {date(proof.verificationLink.expiresAt)} · localisation{' '}
+              {proof.verificationLink.includeLocation ? 'visible' : 'masquée'}. Révoquez ce lien
+              pour changer les informations partagées.
+            </p>
+          )}
+          {proof.shareToken && !proof.verificationLink && (
+            <p>
+              Ancien lien sans expiration. Révoquez-le puis créez un nouveau lien limité dans le
+              temps.
+            </p>
+          )}
           {proof.shareToken ? (
             <>
               <div className="share-url">
@@ -1286,7 +1536,11 @@ function ProofDetail({
                   onChange(
                     await api(`/api/proofs/${proof.id}/share`, {
                       method: 'POST',
-                      body: JSON.stringify({ enabled: true }),
+                      body: JSON.stringify({
+                        enabled: true,
+                        days: shareDays,
+                        includeLocation: shareLocation,
+                      }),
                     }),
                   ),
                 )
@@ -1305,6 +1559,8 @@ function ProofDetail({
             <span>
               {(
                 {
+                  verification_link_created: 'Lien de vérification créé',
+                  verification_link_revoked: 'Lien de vérification révoqué',
                   original_received: 'Original reçu',
                   manifest_frozen: 'Manifeste figé',
                   timestamp_verified: 'Jeton d’horodatage vérifié',
@@ -1477,6 +1733,21 @@ function PublicVerification({ token }: { token: string }) {
         {!proof && !error && <Spinner />}
         {proof && (
           <>
+            {proof.expiresAt && <p>Accessible jusqu’au {date(proof.expiresAt)}.</p>}
+            <p>
+              Signature technique :{' '}
+              {proof.signatureVerified ? 'vérifiée par le serveur' : 'non disponible'}.
+            </p>
+            {proof.location && (
+              <section>
+                <h2>Localisation partagée par le propriétaire</h2>
+                <p>{locationDescription(proof.location)}</p>
+                <p>
+                  Coordonnées déclarées par l’appareil ; le lieu réel de la scène n’est pas
+                  authentifié.
+                </p>
+              </section>
+            )}
             <div className="verification-found">
               <FileCheck2 size={24} />
               <div>
@@ -1559,7 +1830,10 @@ function PublicVerification({ token }: { token: string }) {
           </>
         )}
       </main>
-      <footer>PREUVIX · Open source · Aucun contenu privé n’est affiché sur cette page.</footer>
+      <footer>
+        PREUVIX · Open source · Seules les informations autorisées par le propriétaire sont
+        affichées.
+      </footer>
     </div>
   );
 }

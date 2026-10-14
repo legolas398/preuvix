@@ -13,6 +13,7 @@ import {
 } from '../shared/cases';
 import type { Proof } from '../shared/types';
 import './cases.css';
+import './proof-workspace.css';
 
 type ShareLink = {
   id: string;
@@ -165,6 +166,10 @@ export default function Cases({
   refreshProofs: () => Promise<void>;
   requestCapture: (callback: (proof: Proof) => Promise<void>) => void;
 }) {
+  const [query, setQuery] = useState('');
+  const [since, setSince] = useState('');
+  const [until, setUntil] = useState('');
+  const [mediaType, setMediaType] = useState('all');
   const [list, setList] = useState<CaseSummary[]>([]),
     [dossier, setDossier] = useState<CaseDetail | null>(null);
   const [creating, setCreating] = useState(false),
@@ -360,29 +365,103 @@ export default function Cases({
             {!list.length && !busy && (
               <p>Créez votre premier dossier, puis ajoutez les fichiers à conserver.</p>
             )}
-            {list.map((item) => (
-              <button
-                className="case-file"
-                key={item.id}
-                onClick={() =>
-                  void run('Ouverture du dossier…', async () => {
-                    setShareUrl('');
-                    setReplaceFileId('');
-                    await open(item.id);
-                  })
-                }
-              >
-                <strong>{item.title}</strong>
-                <span>
-                  Version {item.version} · {utc(item.updatedAt)}
-                </span>
-                <p>{item.description}</p>
-              </button>
-            ))}
+            <div className="workspace-filters">
+              <label>
+                Rechercher un dossier
+                <input
+                  type="search"
+                  value={query}
+                  onChange={(e) => setQuery(e.target.value)}
+                  placeholder="Client, intervention, titre…"
+                />
+              </label>
+              <label>
+                Mis à jour depuis
+                <input type="date" value={since} onChange={(e) => setSince(e.target.value)} />
+              </label>
+              <label>
+                Mis à jour jusqu’au
+                <input type="date" value={until} onChange={(e) => setUntil(e.target.value)} />
+              </label>
+            </div>
+            <p>
+              {
+                list.filter(
+                  (item) =>
+                    (item.title + ' ' + item.description)
+                      .toLocaleLowerCase('fr')
+                      .includes(query.toLocaleLowerCase('fr')) &&
+                    (!since || item.updatedAt.slice(0, 10) >= since) &&
+                    (!until || item.updatedAt.slice(0, 10) <= until),
+                ).length
+              }{' '}
+              dossier(s) trouvé(s). Dates en UTC.
+            </p>
+            {list
+              .filter(
+                (item) =>
+                  (item.title + ' ' + item.description)
+                    .toLocaleLowerCase('fr')
+                    .includes(query.toLocaleLowerCase('fr')) &&
+                  (!since || item.updatedAt.slice(0, 10) >= since) &&
+                  (!until || item.updatedAt.slice(0, 10) <= until),
+              )
+              .map((item) => (
+                <button
+                  className="case-file"
+                  key={item.id}
+                  onClick={() =>
+                    void run('Ouverture du dossier…', async () => {
+                      setShareUrl('');
+                      setReplaceFileId('');
+                      await open(item.id);
+                    })
+                  }
+                >
+                  <strong>{item.title}</strong>
+                  <span>
+                    Version {item.version} · {utc(item.updatedAt)}
+                  </span>
+                  <p>{item.description}</p>
+                </button>
+              ))}
           </section>
         )}
         {dossier && !creating && (
           <>
+            <section className="case-panel" aria-label="Checklist du dossier">
+              <h2>Avant de transmettre</h2>
+              <p>
+                Version {dossier.manifest.version} enregistrée sur le serveur. Les brouillons locaux
+                ne font pas partie de ce dossier.
+              </p>
+              <ul className="case-checklist">
+                <li>
+                  {dossier.manifest.files.length ? '✓' : 'À compléter :'}{' '}
+                  {dossier.manifest.files.length} pièce(s) enregistrée(s)
+                </li>
+                <li>
+                  {dossier.manifest.description.trim()
+                    ? '✓ Contexte renseigné'
+                    : 'À compléter : décrire le contexte de l’intervention'}
+                </li>
+                <li>
+                  {dossier.manifest.files.some((f) => f.file.mime.startsWith('image/'))
+                    ? '✓ Photo présente'
+                    : 'À vérifier : ajouter une photo si nécessaire'}
+                </li>
+                <li>Télécharger et relire le PDF et le ZIP avant de les transmettre.</li>
+              </ul>
+              <label>
+                Type de pièce affiché
+                <select value={mediaType} onChange={(e) => setMediaType(e.target.value)}>
+                  <option value="all">Toutes les pièces</option>
+                  <option value="image/">Photos</option>
+                  <option value="video/">Vidéos</option>
+                  <option value="application/">Documents</option>
+                </select>
+              </label>
+            </section>
             <section className="case-panel">
               <label>
                 Version du dossier
@@ -489,7 +568,17 @@ export default function Cases({
                 </button>
               </section>
             )}
-            <EvidenceFiles dossier={dossier} />
+            <EvidenceFiles
+              dossier={{
+                ...dossier,
+                manifest: {
+                  ...dossier.manifest,
+                  files: dossier.manifest.files.filter(
+                    (file) => mediaType === 'all' || file.file.mime.startsWith(mediaType),
+                  ),
+                },
+              }}
+            />
             <button
               className="button secondary"
               onClick={() =>

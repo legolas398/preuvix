@@ -341,6 +341,14 @@ export function createApp(
       receipt: proof.receipt,
       storedFileMatches: hash(row.original) === proof.manifest.file.sha256,
       manifestMatches: hash(row.manifest) === proof.manifestHash,
+      signatureVerified: !!proof.attestation,
+      expiresAt: proof.verificationLink?.expiresAt ?? null,
+      ...(proof.verificationLink?.includeLocation
+        ? {
+            location:
+              proof.manifest.mobileEvidence?.location ?? proof.manifest.capture?.location?.start,
+          }
+        : {}),
     });
   });
   const recipient = (req: express.Request, res: express.Response, countView = false) => {
@@ -608,6 +616,17 @@ export function createApp(
     if (!row) return void res.status(404).json({ error: 'Dossier introuvable.' });
     res.json(store.summary(row));
   });
+  app.get('/api/proofs/:id/integrity', (req, res) => {
+    const row = store.get(req.params.id);
+    if (!row) return void res.status(404).json({ error: 'Preuve introuvable.' });
+    const proof = store.summary(row);
+    res.json({
+      originalMatches: hash(row.original) === proof.manifest.file.sha256,
+      manifestMatches: hash(row.manifest) === proof.manifestHash,
+      signatureVerified: !!proof.attestation,
+      checkedAt: new Date().toISOString(),
+    });
+  });
   app.post('/api/proofs/:id/timestamp', async (req, res) => {
     if (!store.get(req.params.id))
       return void res.status(404).json({ error: 'Dossier introuvable.' });
@@ -660,11 +679,20 @@ export function createApp(
   app.post('/api/proofs/:id/share', (req, res) => {
     const row = store.get(req.params.id);
     if (!row) return void res.status(404).json({ error: 'Dossier introuvable.' });
-    const parsed = z.object({ enabled: z.boolean() }).safeParse(req.body);
+    const parsed = z
+      .object({
+        enabled: z.boolean(),
+        days: z.union([z.literal(7), z.literal(30), z.literal(90)]).default(7),
+        includeLocation: z.boolean().default(false),
+      })
+      .strict()
+      .safeParse(req.body);
     if (!parsed.success) return void res.status(400).json({ error: 'Choix de partage invalide.' });
     store.share(
       row.id,
-      parsed.data.enabled ? row.share_token || randomBytes(24).toString('hex') : null,
+      parsed.data.enabled ? randomBytes(24).toString('hex') : null,
+      parsed.data.days,
+      parsed.data.includeLocation,
     );
     res.json(store.summary(store.get(row.id)!));
   });

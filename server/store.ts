@@ -48,6 +48,7 @@ export class Store {
         expires_at TEXT NOT NULL, revoked_at TEXT, views INTEGER NOT NULL DEFAULT 0, last_view_at TEXT
       );
       CREATE TABLE IF NOT EXISTS reviews (proof_id TEXT NOT NULL REFERENCES proofs(id) ON DELETE CASCADE, payload TEXT NOT NULL);
+      CREATE TABLE IF NOT EXISTS verification_links (proof_id TEXT PRIMARY KEY REFERENCES proofs(id) ON DELETE CASCADE, expires_at TEXT NOT NULL, include_location INTEGER NOT NULL DEFAULT 0);
       CREATE TRIGGER IF NOT EXISTS append_only_reviews BEFORE UPDATE ON reviews
         BEGIN SELECT RAISE(ABORT, 'Reviews are append-only'); END;
     `);
@@ -106,6 +107,7 @@ export class Store {
       receipt: row.receipt ? JSON.parse(row.receipt) : null,
       events: JSON.parse(row.events),
       shareToken: row.share_token,
+      verificationLink: this.verificationLink(row.id),
       attestation,
       reviews,
       watermarked: Boolean(this.watermarkCode(row.id)),
@@ -216,8 +218,17 @@ export class Store {
       Row | undefined;
   }
   byShare(token: string) {
-    return this.db.prepare('SELECT * FROM proofs WHERE share_token = ?').get(token) as
-      Row | undefined;
+    return this.db
+      .prepare(
+        'SELECT p.* FROM proofs p LEFT JOIN verification_links v ON v.proof_id=p.id WHERE p.share_token = ? AND (v.expires_at IS NULL OR v.expires_at > ?)',
+      )
+      .get(token, new Date().toISOString()) as Row | undefined;
+  }
+  verificationLink(id: string) {
+    const row = this.db
+      .prepare('SELECT expires_at,include_location FROM verification_links WHERE proof_id=?')
+      .get(id) as { expires_at: string; include_location: number } | undefined;
+    return row ? { expiresAt: row.expires_at, includeLocation: !!row.include_location } : null;
   }
   usedBytes() {
     return Number(
@@ -287,8 +298,21 @@ export class Store {
       throw error;
     }
   }
-  share(id: string, token: string | null) {
-    this.db.prepare('UPDATE proofs SET share_token=? WHERE id=?').run(token, id);
+  share(id: string, token: string | null, days = 7, includeLocation = false) {
+    this.db.exec('BEGIN IMMEDIATE');
+    try {
+      this.db.prepare('UPDATE proofs SET share_token=? WHERE id=?').run(token, id);
+      if (token)
+        this.db
+          .prepare('INSERT OR REPLACE INTO verification_links VALUES (?,?,?)')
+          .run(id, new Date(Date.now() + days * 86400000).toISOString(), Number(includeLocation));
+      else this.db.prepare('DELETE FROM verification_links WHERE proof_id=?').run(id);
+      this.addEvent(id, token ? 'verification_link_created' : 'verification_link_revoked');
+      this.db.exec('COMMIT');
+    } catch (error) {
+      this.db.exec('ROLLBACK');
+      throw error;
+    }
   }
   delete(id: string) {
     const row = this.get(id);

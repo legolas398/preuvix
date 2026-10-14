@@ -38,6 +38,7 @@ test('multi-file dossier preserves versions, verifies originals, exports and rev
     );
     await page.getByRole('button', { name: 'Conserver ma preuve' }).click();
     const proof = await (await saved).json();
+    await page.getByRole('button', { name: 'Ouvrir la preuve enregistrée' }).click();
     await expect(page.getByRole('dialog')).toHaveCount(0);
     return (await page.request.get('/api/proofs/' + proof.id + '/original')).body();
   }
@@ -45,6 +46,16 @@ test('multi-file dossier preserves versions, verifies originals, exports and rev
   const buffer = await capture('premier.jpg');
   await capture('second.jpg');
   await waitFor(page.getByText('Fichier enregistré', { exact: true })).toHaveCount(2);
+  await expect(page.getByLabel('Checklist du dossier')).toContainText('2 pièce(s) enregistrée(s)');
+  await page.getByLabel('Type de pièce affiché').selectOption('video/');
+  await expect(
+    page.getByRole('region', { name: 'Fichiers et traçabilité' }).getByRole('article'),
+  ).toHaveCount(0);
+  await page.getByLabel('Type de pièce affiché').selectOption('image/');
+  await expect(
+    page.getByRole('region', { name: 'Fichiers et traçabilité' }).getByRole('article'),
+  ).toHaveCount(2);
+  await page.getByLabel('Type de pièce affiché').selectOption('all');
   await expect(page.getByRole('combobox', { name: 'Version du dossier', exact: true })).toHaveValue(
     '3',
   );
@@ -108,4 +119,11 @@ test('multi-file dossier preserves versions, verifies originals, exports and rev
   );
   await page.screenshot({ path: 'test-results/dossiers-mobile.png', fullPage: true });
   expect(errors).toEqual([]);
+  await page.getByRole('button', { name: 'Tous les dossiers', exact: true }).click();
+  await page.getByLabel('Rechercher un dossier').fill(title);
+  await expect(page.getByLabel('Liste des dossiers').getByRole('button')).toHaveCount(1);
+  await page.getByLabel('Mis à jour depuis').fill('2099-01-01');
+  await expect(page.getByLabel('Liste des dossiers').getByRole('button')).toHaveCount(0);
+  await page.getByLabel('Mis à jour depuis').fill('');
+  await expect(page.getByLabel('Liste des dossiers').getByRole('button')).toHaveCount(1);
 });
