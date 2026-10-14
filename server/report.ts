@@ -396,7 +396,7 @@ export async function makeReport(proof: Proof, origin: string, original: Buffer)
     'Origine',
     manifest.capture
       ? `Capture via la caméra Preuvix (session ${manifest.capture.id.slice(0, 8)})`
-      : manifest.mobileEvidence?.origin === 'native_camera'
+      : manifest.mobileEvidence && manifest.mobileEvidence.origin !== 'system_file_picker'
         ? 'Photo produite par la caméra Android (déclaratif, sans défi web)'
         : 'Fichier importé par le déposant',
   );
@@ -433,8 +433,10 @@ export async function makeReport(proof: Proof, origin: string, original: Buffer)
   if (manifest.mobileEvidence) {
     doc.field(
       'Origine déclarée',
-      manifest.mobileEvidence.origin === 'native_camera'
-        ? 'Caméra Android — traitement JPEG possible'
+      manifest.mobileEvidence.origin !== 'system_file_picker'
+        ? manifest.mobileEvidence.transformation === 'camera_video_encoding'
+          ? 'Caméra Android — vidéo encodée en direct'
+          : 'Caméra Android — traitement JPEG possible'
         : 'Import Android — octets reçus sans transformation par Preuvix',
     );
     doc.field(
@@ -465,13 +467,13 @@ export async function makeReport(proof: Proof, origin: string, original: Buffer)
         ? 'review'
         : 'passed',
       'Empreinte engagée auprès du serveur',
-      `Le navigateur a calculé le SHA-256 du média et l’a engagé ${capture.elapsedSeconds !== undefined ? `${capture.elapsedSeconds} s après l’émission du défi (limite ${capture.challenge?.maxSeconds ?? '-'} s)` : 'pendant la session'}. Cet engagement est immuable.`,
+      `Le navigateur a calculé le SHA-256 du média et l’a engagé ${capture.elapsedSeconds !== undefined ? `${capture.elapsedSeconds} s après l’ouverture de la session` : 'pendant la session'}. Cet engagement est immuable.`,
       paris(capture.committedAt),
     );
   } else
     doc.step(
       'unverified',
-      manifest.mobileEvidence?.origin === 'native_camera'
+      manifest.mobileEvidence && manifest.mobileEvidence.origin !== 'system_file_picker'
         ? 'Photo produite par la caméra Android'
         : 'Import d’un fichier existant',
       'Aucune session de capture : l’origine du fichier est déclarée par le déposant.',

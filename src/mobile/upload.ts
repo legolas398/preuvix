@@ -16,6 +16,14 @@ export async function sendDraft(draft: Draft) {
   let proof = draft.proof;
   if (!proof) {
     if (!draft.file || !draft.evidence) throw new Error('Brouillon incomplet.');
+    if (
+      !draft.captureId ||
+      draft.evidence.origin !== 'in_app_camera' ||
+      draft.evidence.location.status !== 'recorded'
+    )
+      throw new Error(
+        'Ce brouillon ne provient pas d’une capture en direct avec localisation. Recommencez la capture.',
+      );
     const file = new File([draft.file], draft.fileName!, { type: draft.file.type });
     const body = new FormData();
     body.append('file', file);
@@ -23,7 +31,8 @@ export async function sendDraft(draft: Draft) {
     body.append('description', draft.description);
     body.append('requestKey', draft.id);
     body.append('clientSha256', await sha256File(file));
-    body.append('source', draft.evidence.origin === 'native_camera' ? 'camera' : 'upload');
+    body.append('source', 'camera');
+    body.append('captureId', draft.captureId);
     body.append('mobileEvidence', JSON.stringify(draft.evidence));
     proof = await mobileApi<Proof>('/api/mobile/proofs', { method: 'POST', body });
     // Persist server acknowledgement before attaching; a lost response reuses the same requestKey.

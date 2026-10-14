@@ -23,15 +23,16 @@ Capacitor convient : il embarque le frontend compilé, tandis que les opération
 ## Fonctions de cette version
 
 - Connexion au même espace propriétaire. Liste, création et lecture des dossiers et de leurs versions.
-- Import via sélecteur système de photos JPEG/PNG/WebP et documents **PDF**, 10 Mo par pièce, 500 pages maximum pour un PDF. Les autres documents bureautiques ne sont pas pris en charge.
-- Caméra Android avec le plugin officiel ; aucune réduction de dimensions ni édition demandée. Le JPEG peut être traité par la caméra/le plugin, ce qui est indiqué dans le brouillon, le manifeste et les rapports. Aucun statut de capture web avec défi n’est attribué.
-- Géolocalisation ponctuelle facultative, après activation explicite ; source, précision et date de mesure conservées. Le refus ou l’indisponibilité est enregistré sans bloquer le fichier. La position se rapporte au téléphone lors de l’action, pas à l’origine historique d’un document importé.
-- Brouillons IndexedDB contenant les octets et métadonnées, avant tout envoi. Après fermeture/reconnexion, reprise manuelle avec le même identifiant. Les brouillons sont séparés par adresse de backend.
+- Capture de photos et vidéos en direct uniquement, dans la caméra intégrée à l’application (WebView). Photos JPEG : 10 Mo maximum. Vidéos MP4/WebM selon le moteur de l’appareil : 60 secondes et 50 Mo maximum. Aucun sélecteur de galerie ni import photo, vidéo ou PDF. Le serveur refuse aussi les imports directs via API.
+- Même protocole que le site : session serveur liée à la connexion, SHA-256 engagé avant le dépôt, puis contrôle du fichier reçu et signature du manifeste. Aucun code ni geste à reproduire. Le statut ordinaire est `capture_documented`, sans authentification matérielle du capteur. Les pixels de la caméra sont encodés en JPEG par la vue intégrée.
+- Géolocalisation obligatoire à chaque photo et au début et à la fin de chaque vidéo, avec permission système, relevé frais et contrôle serveur. Un refus, une indisponibilité ou une mesure trop ancienne bloque la capture. Aucun suivi en arrière-plan. Les coordonnées de l’appareil ne prouvent pas le lieu réel de la scène.
+- Brouillons IndexedDB contenant les octets et métadonnées après engagement en ligne. Le fichier doit être déposé dans les 24 heures, avant changement de connexion. Une réponse perdue après dépôt peut être récupérée avec le même identifiant, même après reconnexion. Un brouillon non encore reçu par le serveur exige une nouvelle capture après reconnexion. Les anciens brouillons importés ne sont plus envoyables. Les dossiers déjà déposés restent lisibles.
 - États distincts : local, envoi en cours, reçu par le serveur, ajout au dossier terminé, horodatage validé seulement si un reçu réel existe. Une réponse perdue peut laisser temporairement l’état « local » alors que le serveur a reçu le fichier ; la reprise réconcilie cet état sans nouveau dépôt.
 - Exports PDF/ZIP existants via Filesystem + feuille de partage Android ; choisir une application destinataire ou une application permettant d’enregistrer le fichier. Les fichiers temporaires restent dans le cache privé pour que le destinataire puisse les lire. Android peut ensuite purger ce cache.
-- Traçabilité : empreintes, versions, clé publique, événements et états réels des prestataires. Les nouvelles demandes TSA/signature/ancrage restent à effectuer depuis le site web dans cette première version ; leurs résultats sont consultables sur Android.
+- Traçabilité : empreintes, versions, clé publique, événements et états réels des prestataires. Android permet de demander un horodatage ou un ancrage (avec consentement), de reprendre une demande, de vérifier Bitcoin et de partager la preuve `.ots`. La signature électronique auprès d’un prestataire se demande encore sur le site web.
+- Certification : Android et le site partagent la présentation des justificatifs, reçus RFC 3161, détails Bitcoin, erreurs et dates de mise à jour. Les justificatifs concernent uniquement la version affichée ; les versions historiques sont signalées.
 
-La caméra, le sélecteur et le partage nécessitent une validation sur appareil. Un navigateur de test ne prouve pas que les activités natives fonctionnent sur tous les constructeurs.
+La caméra intégrée, les permissions GPS et le partage nécessitent une validation sur appareil. Un navigateur de test ne prouve pas que les activités natives fonctionnent sur tous les constructeurs.
 
 ## Prérequis
 
@@ -136,11 +137,11 @@ Le projet ne contient **aucune configuration ni clé de signature de publication
 
 Le middleware n’accepte les sessions mobiles que si `MOBILE_ENABLED=true`. CORS autorise précisément `https://localhost`, sans cookies ni wildcard. Les contrôles CSRF et cookies HttpOnly/SameSite=Strict du site sont conservés. Une session Bearer expirée ne contourne pas ces contrôles. Il n’y a pas de flux OAuth existant à adapter. Ne pas interpréter cette installation mono-propriétaire comme une application multi-comptes : la séparation par organisation ou utilisateur nécessiterait un modèle de droits supplémentaire.
 
-`POST /api/mobile/proofs` exige une session mobile valide, conserve les octets exacts, compare leur SHA-256 et inclut les métadonnées mobiles dans le manifeste signé. Le dépôt web strict existant reste inchangé. Les PDF sont lus structurellement, pas exécutés ni considérés comme signés/qualifiés. Les téléchargements d’originaux PDF sont des pièces jointes.
+`POST /api/mobile/proofs` exige une session mobile valide, conserve les octets exacts, compare leur SHA-256 et inclut les métadonnées mobiles dans le manifeste signé. Les nouveaux dépôts web et Android exigent une capture en direct et sa position. Les imports de photos et de PDF sont refusés ; les PDF restent disponibles comme exports de dossier.
 
 Les reprises utilisent le même `requestKey`. Si le fichier a été reçu mais son rattachement échoue, son identifiant est enregistré localement ; la reprise vérifie sa présence dans la dernière version avant de l’ajouter. En cas de modification concurrente, le serveur rejette le conflit de version et une nouvelle tentative explicite recharge la version courante. Les brouillons envoyés restent sur l’appareil jusqu’à suppression explicite. Effacer les données de l’application ou la désinstaller supprime les brouillons locaux ; ils ne constituent pas une sauvegarde serveur. Android Auto Backup est désactivé.
 
-Permissions : Internet, position approximative/précise uniquement à la demande. Aucune localisation en arrière-plan, permission globale de stockage, microphone ou permission caméra permanente n’est demandée. La caméra utilise l’activité système, sans enregistrement dans la galerie. La récupération `appRestoredResult` conserve le contexte si Android recrée l’application pendant la caméra ; ce cas reste à tester physiquement.
+Permissions : Internet, caméra et position approximative/précise à la demande. Le microphone est facultatif, désactivé par défaut ; son activation demande la permission Android RECORD_AUDIO. La caméra intégrée utilise `getUserMedia` et la permission Android CAMERA, gérée par Capacitor. Aucun accès à la galerie ni suivi GPS en arrière-plan. Une connexion est obligatoire pour ouvrir la session et engager le SHA-256 ; aucune nouvelle capture certifiable entièrement hors ligne.
 
 ## Vérifications
 
@@ -154,7 +155,7 @@ npm.cmd run android:sync
 
 `test:android` utilise Edge sur Windows (Chromium ailleurs), les ressources réellement compilées et un backend isolé sur le port 3013. Il simule l’origine Capacitor par interception réseau, **pas un appareil Android**. Sous Linux, installer préalablement Chromium via `npx playwright install chromium`. La base de test est `.tools/android-browser-data` ; ne pas y placer de données réelles.
 
-Couverture automatisée : connexion, CORS, refus d’origine étrangère, expiry/logout, création idempotente, import photo/PDF, conservation des octets, refus GPS, perte de réponse après réception serveur, récupération du brouillon après rechargement, reprise sans doublon, export PDF, absence de débordement horizontal à 390 px et maintien des restrictions d’import web.
+Couverture automatisée : connexion, CORS, expiration/logout, création idempotente, capture réelle via caméra simulée, blocage GPS refusé/indisponible/périmé, refus photo/PDF importés et absence de session, cohérence du SHA-256 et des coordonnées, perte de réponse et reprise sans doublon, export PDF, affichage mobile et certification sans défi.
 
 Validation physique encore requise avant diffusion :
 
@@ -162,7 +163,7 @@ Validation physique encore requise avant diffusion :
 | ------------ | ----------------------------------------------------------------------------------------------------------------- |
 | Connexion    | Bon/mauvais mot de passe, expiration, fermeture/réouverture, déconnexion.                                         |
 | Caméra       | Annulation, appareil absent, photo grande taille, rotation, recréation d’activité, absence d’édition silencieuse. |
-| Sélecteurs   | Photo locale/cloud, PDF, annulation, HEIC refusé sans conversion, absence de permission globale de stockage.      |
+| Vidéo        | MP4/WebM, arrêt manuel et à 60 s, audio optionnel, refus du GPS de fin, lecture de l’original exporté.            |
 | Localisation | Refus, permission approximative, précision, GPS coupé, mesure fraîche et absence de suivi en arrière-plan.        |
 | Réseau       | Mode avion avant et pendant l’envoi, réponse perdue, reprise après redémarrage, absence de doublon.               |
 | Exports      | PDF/ZIP ouverts dans l’application destinataire, annulation du partage, gros dossiers et manque d’espace.         |
@@ -170,9 +171,9 @@ Validation physique encore requise avant diffusion :
 
 ### Résultat dans l’environnement de travail
 
-Validation du 12 octobre 2026 : compilations web et ressources Android réussies, synchronisation des six plugins réussie, 26 tests API/de régression réussis (puis 5 tests ciblés relancés après les derniers ajustements). Le parcours navigateur mobile passe avec refus GPS, réponse d’envoi perdue, rechargement, reprise idempotente et PDF. Le parcours navigateur web des dossiers passe aussi : captures, versions, contrôle d’intégrité, exports et révocation du partage. Sa position GPS simulée est désormais renouvelée à chaque capture, pour respecter le contrôle existant de fraîcheur de 30 secondes. Les ressources natives ont été inspectées, mais pas compilées sur cette machine.
+Validation du 14 octobre 2026 : compilation web, compilation des ressources Android, synchronisation Capacitor et compilation native Gradle réussies. APK debug produit : `android/app/build/outputs/apk/debug/app-debug.apk`, signature APK v2 vérifiée. Neuf tests API/certification ciblés passent, ainsi que le parcours navigateur Android (photo, vidéo, GPS obligatoire au début et à la fin, reprise après réponse perdue, certification et export PDF). Ce parcours navigateur ne remplace pas un essai physique.
 
-`gradlew.bat assembleDebug` a été tenté et s’est arrêté : **`JAVA_HOME is not set and no 'java' command could be found`**. Aucun JDK/SDK Android ou appareil n’a été détecté. **Aucun APK ni AAB n’a donc été généré ici.** La compilation release n’a pas été effectuée : il faut d’abord fournir le domaine backend réel et la configuration de signature de l’exploitant.
+Le backend local de test répond sur le port 3015 ; l'APK de test utilise `http://127.0.0.1:3015` avec `adb reverse tcp:3015 tcp:3015`. Aucun appareil autorisé n'est détecté par ADB : installation et validation sur téléphone restent à effectuer. Aucun déploiement public ni AAB release n'a été réalisé ; le domaine backend et la signature de publication restent à configurer.
 
 Autres limites : pas de synchronisation automatique en arrière-plan ni de liste serveur accessible hors ligne après une nouvelle connexion ; les brouillons persistants restent locaux. Les exports mobiles sont plafonnés à **32 Mo** avant passage en mémoire/base64 vers le plugin natif ; au-delà, un message invite à utiliser le site web. Les gros ZIP demandent encore une optimisation vers un transfert natif en flux. Les services externes non configurés et leur validation réelle restent des dépendances du backend.
 

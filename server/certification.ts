@@ -4,7 +4,6 @@ import {
   createPublicKey,
   sign,
   randomBytes,
-  randomInt,
   randomUUID,
   verify,
 } from 'node:crypto';
@@ -20,31 +19,8 @@ import {
   type CaptureSession,
   type Attestation,
   type ChallengeReview,
-  type LivenessChallenge,
   type SignedReview,
 } from '../shared/capture';
-
-// Unambiguous characters: easy to handwrite and read back on a photo.
-const CODE_ALPHABET = 'ACDEFHJKMNPRTUVWXY3479';
-const GESTURES = [
-  'Montrez 1 doigt levé',
-  'Montrez 2 doigts levés',
-  'Montrez 3 doigts levés',
-  'Montrez 4 doigts levés',
-  'Montrez la main ouverte',
-  'Montrez le poing fermé',
-  'Montrez le pouce levé',
-];
-export const CHALLENGE_MAX_SECONDS = 180;
-
-export function newChallenge(): LivenessChallenge {
-  const code = Array.from({ length: 6 }, () => CODE_ALPHABET[randomInt(CODE_ALPHABET.length)]);
-  return {
-    code: code.join(''),
-    gesture: GESTURES[randomInt(GESTURES.length)],
-    maxSeconds: CHALLENGE_MAX_SECONDS,
-  };
-}
 
 export function certification(store: Store, directory: string) {
   store.db.exec('CREATE TABLE IF NOT EXISTS signing_key_history (key_id TEXT PRIMARY KEY)');
@@ -124,7 +100,6 @@ export function certification(store: Store, directory: string) {
       nonce: randomBytes(16).toString('hex'),
       issuedAt: new Date().toISOString(),
       expiresAt: new Date(Date.now() + 10 * 60000).toISOString(),
-      challenge: newChallenge(),
     };
     store.db
       .prepare('INSERT INTO capture_sessions VALUES (?,?,?,NULL)')
@@ -154,7 +129,7 @@ export function certification(store: Store, directory: string) {
       return previous;
     }
     const session: CaptureSession = JSON.parse(row.session);
-    if (payload.nonce !== session.nonce) throw new Error('Défi de session incorrect.');
+    if (payload.nonce !== session.nonce) throw new Error('Identifiant de session incorrect.');
     if (
       Date.now() >
       Math.min(

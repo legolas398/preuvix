@@ -78,11 +78,11 @@ test('guided photo and video capture commit hashes, preserve declared context an
     expect(proof.manifest.capture.location.start.status).toBe('recorded');
     expect(proof.manifest.capture.location.start.latitude).toBe(48.8566);
     if (kind === 'video') expect(proof.manifest.capture.location.end.status).toBe('recorded');
-    expect(proof.manifest.capture.challenge.code).toMatch(/^[A-Z0-9]{6}$/);
+    expect(proof.manifest.capture.challenge).toBeUndefined();
     expect(proof.manifest.capture.sha256).toBe(proof.manifest.file.sha256);
     expect(proof.manifest.declaration.author).toBe('Auteur de test');
     expect(proof.attestation.algorithm).toBe('Ed25519');
-    expect(proof.manifest.certification.status).toBe('capture_challenged');
+    expect(proof.manifest.certification.status).toBe('capture_documented');
     await expect(page.getByRole('region', { name: 'Localisation de la capture' })).toContainText(
       '48.856600',
     );

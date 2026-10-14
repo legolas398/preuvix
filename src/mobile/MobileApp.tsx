@@ -1,39 +1,23 @@
+import ServiceEvidence from '../ServiceEvidence';
+import MobileCertificationActions from './MobileCertificationActions';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { App as NativeApp } from '@capacitor/app';
 import { Capacitor } from '@capacitor/core';
-import {
-  FolderOpen,
-  Camera,
-  FilePlus,
-  RefreshCw,
-  ArrowLeft,
-  LogOut,
-  Download,
-  MapPin,
-} from 'lucide-react';
-import {
-  serviceLabels,
-  serviceStateLabel,
-  type CaseDetail,
-  type CaseSummary,
-} from '../../shared/cases';
-import { locationDescription, type LocationSample } from '../../shared/capture';
+import { FolderOpen, Camera, RefreshCw, ArrowLeft, LogOut, Download } from 'lucide-react';
+import { type CaseDetail, type CaseSummary } from '../../shared/cases';
+import { locationDescription } from '../../shared/capture';
 import type { MobileEvidence } from '../../shared/mobile';
 import { SignatureControl } from '../CaptureEvidence';
 import { backend } from './config';
 import { mobileApi, setSession } from './api';
 import { listDrafts, newDraft, removeDraft, saveDraft, type Draft } from './drafts';
-import { capturePhoto, photoFile, readLocation, selectFile, shareDownload } from './device';
+import { readLocation, shareDownload } from './device';
+import CapturePanel from '../CapturePanel';
+import type { CaptureRecord } from '../../shared/capture';
 import { sendDraft } from './upload';
 
-type PendingCamera = {
-  id: string;
-  caseId: string;
-  backend: string;
-  location: LocationSample;
-  selectedAt: string;
-};
-const cameraKey = 'preuvix-pending-camera';
+const captureRequest = <T,>(url: string, body: unknown) =>
+  mobileApi<T>(url, { method: 'POST', body: JSON.stringify(body) });
 function configuration() {
   try {
     return { url: backend(), error: '' };
@@ -57,7 +41,7 @@ export default function MobileApp() {
   const [creating, setCreating] = useState(false);
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
-  const [locationEnabled, setLocationEnabled] = useState(false);
+  const [capturing, setCapturing] = useState(false);
   const [busy, setBusy] = useState('');
   const active = useRef(false);
   const [error, setError] = useState('');
@@ -85,40 +69,40 @@ export default function MobileApp() {
     await reloadDrafts();
     setCases((await mobileApi<{ cases: CaseSummary[] }>('/api/cases')).cases);
   }
-  const stage = useCallback(
-    async (file: File, context: PendingCamera, camera: boolean) => {
-      if (file.size > 10 * 1024 * 1024)
-        throw new Error(
-          'Maximum 10 Mo : aucune compression automatique. La photo n’a pas été enregistrée comme brouillon.',
-        );
-      const evidence: MobileEvidence = {
-        origin: camera ? 'native_camera' : 'system_file_picker',
-        selectedAt: context.selectedAt,
-        transformation: camera ? 'camera_jpeg_processing' : 'none_by_preuvix',
-        location: context.location,
-      };
-      const draft = {
-        ...newDraft('file'),
-        id: context.id,
-        backend: context.backend,
-        title: file.name.slice(0, 120),
-        caseId: context.caseId,
-        file,
-        fileName: file.name,
-        evidence,
-      };
-      await saveDraft(draft);
-      if (camera) localStorage.removeItem(cameraKey);
-      await reloadDrafts();
-      setTab('drafts');
-      setDetail(null);
-      setNotice('Brouillon local enregistré. Aucun fichier n’a encore été envoyé.');
-    },
-    [reloadDrafts],
-  );
+  async function stage(file: File, captureId: string, record: CaptureRecord) {
+    if (!detail || record.location?.start.status !== 'recorded')
+      throw new Error('Localisation obligatoire.');
+    if (record.kind === 'video' && record.location.end?.status !== 'recorded')
+      throw new Error('Localisation de fin obligatoire. Recommencez la vidéo.');
+    if (file.size > (record.kind === 'video' ? 50 : 10) * 1024 * 1024)
+      throw new Error('Maximum 10 Mo par photo ou 50 Mo par vidéo. Recommencez la capture.');
+    const evidence: MobileEvidence = {
+      origin: 'in_app_camera',
+      selectedAt: record.startedAt,
+      transformation: record.kind === 'video' ? 'camera_video_encoding' : 'camera_jpeg_processing',
+      location: record.location.start,
+    };
+    await saveDraft({
+      ...newDraft('file'),
+      title: file.name,
+      caseId: detail.manifest.id,
+      file,
+      fileName: file.name,
+      evidence,
+      captureId,
+    });
+    await reloadDrafts();
+    setCapturing(false);
+    setTab('drafts');
+    setDetail(null);
+    setNotice(
+      'Capture en direct enregistrée. Envoyez-la dans les 24 heures, avec la même connexion.',
+    );
+  }
   useEffect(() => {
     const expire = () => {
       setAuthenticated(false);
+      setCapturing(false);
       setDetail(null);
       setPassword('');
     };
@@ -134,33 +118,13 @@ export default function MobileApp() {
   }, []);
   useEffect(() => {
     if (!Capacitor.isNativePlatform()) return;
-    const listener = NativeApp.addListener('appRestoredResult', async (event) => {
-      if (event.pluginId !== 'Camera' || event.methodName !== 'takePhoto') return;
-      try {
-        const raw = localStorage.getItem(cameraKey);
-        if (!raw)
-          throw new Error('Une capture a été interrompue sans contexte de dossier récupérable.');
-        const context: PendingCamera = JSON.parse(raw);
-        if (context.backend !== backend())
-          throw new Error('La capture interrompue appartient à un autre serveur.');
-        if (!event.success) throw new Error(event.error?.message || 'Capture interrompue.');
-        await stage(await photoFile(event.data), context, true);
-      } catch (failure) {
-        setError((failure as Error).message);
-      }
-    });
-    return () => {
-      void listener.then((handle) => handle.remove());
-    };
-  }, [stage]);
-  useEffect(() => {
-    if (!Capacitor.isNativePlatform()) return;
     const listener = NativeApp.addListener('backButton', () => {
       if (active.current) {
         setNotice('Une action est en cours ; attendez son résultat.');
         return;
       }
-      if (creating) setCreating(false);
+      if (capturing) setCapturing(false);
+      else if (creating) setCreating(false);
       else if (detail) setDetail(null);
       else if (tab === 'drafts') setTab('cases');
       else void NativeApp.minimizeApp();
@@ -168,22 +132,9 @@ export default function MobileApp() {
     return () => {
       void listener.then((handle) => handle.remove());
     };
-  }, [creating, detail, tab]);
-  async function addFile(camera: boolean, photos = false) {
-    if (!detail) return;
-    const location = locationEnabled ? await readLocation() : { status: 'not_requested' as const };
-    const context: PendingCamera = {
-      id: crypto.randomUUID(),
-      caseId: detail.manifest.id,
-      backend: backend(),
-      location,
-      selectedAt: new Date().toISOString(),
-    };
-    if (camera) localStorage.setItem(cameraKey, JSON.stringify(context));
-    const file = camera ? await capturePhoto() : await selectFile(photos);
-    if (file) await stage(file, context, camera);
-  }
+  }, [creating, detail, tab, capturing]);
   const back = () => {
+    setCapturing(false);
     setDetail(null);
     setCreating(false);
   };
@@ -326,12 +277,21 @@ export default function MobileApp() {
                     {draft.evidence && (
                       <>
                         <p>
-                          {draft.evidence.origin === 'native_camera'
-                            ? 'Photo produite par la caméra Android · traitement JPEG possible'
+                          {draft.evidence.origin !== 'system_file_picker'
+                            ? draft.evidence.transformation === 'camera_video_encoding'
+                              ? 'Vidéo en direct · encodage MP4 / WebM'
+                              : 'Photo de la caméra · encodage JPEG'
                             : 'Fichier importé · aucune transformation par Preuvix'}
                         </p>
                         <p>{locationDescription(draft.evidence.location)}</p>
                       </>
+                    )}
+                    {draft.kind === 'file' && !draft.proof && !draft.completed && (
+                      <p className="mobile-small">
+                        {draft.captureId && draft.evidence?.origin === 'in_app_camera'
+                          ? 'Envoyez cette capture dans les 24 heures et avant de vous déconnecter. Une nouvelle connexion exige une nouvelle capture si le serveur n’a pas encore reçu le fichier.'
+                          : 'Ancien brouillon non admissible : recommencez une capture en direct avec localisation. Aucun nouvel import n’est autorisé.'}
+                      </p>
                     )}
                     {draft.proof && (
                       <p>
@@ -343,7 +303,15 @@ export default function MobileApp() {
                     {!draft.completed && (
                       <button
                         className="button primary"
-                        disabled={!!busy || !online}
+                        disabled={
+                          !!busy ||
+                          !online ||
+                          (draft.kind === 'file' &&
+                            !draft.proof &&
+                            (!draft.captureId ||
+                              draft.evidence?.origin !== 'in_app_camera' ||
+                              draft.evidence.location.status !== 'recorded'))
+                        }
                         onClick={() =>
                           void run('Envoi en cours', async () => {
                             const result = await sendDraft(draft);
@@ -464,54 +432,32 @@ export default function MobileApp() {
                   </select>
                 </label>
                 <section className="mobile-card">
-                  <h2>Ajouter une pièce</h2>
+                  <h2>Ajouter une capture en direct</h2>
                   <p>
-                    Photos JPEG, PNG, WebP ou documents PDF · 10 Mo maximum. Les octets reçus sont
-                    conservés.
+                    Photo ou vidéo de 60 secondes maximum. Caméra et localisation obligatoires, au
+                    début et à la fin de la vidéo. Aucun import. Une connexion au serveur est
+                    nécessaire pour engager la capture.
                   </p>
-                  <label className="mobile-check">
-                    <input
-                      type="checkbox"
-                      checked={locationEnabled}
-                      onChange={(e) => setLocationEnabled(e.target.checked)}
+                  {capturing ? (
+                    <CapturePanel
+                      request={captureRequest}
+                      readPosition={readLocation}
+                      close={() => setCapturing(false)}
+                      onCapture={(file, captureId, record) =>
+                        void run('Enregistrement de la capture', () =>
+                          stage(file, captureId, record),
+                        )
+                      }
                     />
-                    <MapPin size={20} />
-                    Ajouter ma position au moment de l’action
-                  </label>
-                  <p className="mobile-small">
-                    Facultatif. Un refus n’empêche pas l’ajout. La position décrit le téléphone, pas
-                    nécessairement le lieu de la scène ou du document.
-                  </p>
-                  <div className="mobile-actions">
+                  ) : (
                     <button
-                      disabled={!!busy}
+                      disabled={!!busy || !online}
                       className="button primary"
-                      onClick={() => void run('Ouverture de la caméra', () => addFile(true))}
+                      onClick={() => setCapturing(true)}
                     >
-                      <Camera size={20} />
-                      Prendre une photo
+                      <Camera size={20} /> Prendre une photo ou une vidéo
                     </button>
-                    <button
-                      disabled={!!busy}
-                      className="button secondary"
-                      onClick={() => void run('Sélection de photo', () => addFile(false, true))}
-                    >
-                      Choisir une photo
-                    </button>
-                    <button
-                      disabled={!!busy}
-                      className="button secondary"
-                      onClick={() => void run('Sélection de fichier', () => addFile(false))}
-                    >
-                      <FilePlus size={20} />
-                      Choisir un document
-                    </button>
-                  </div>
-                  <p className="mobile-small">
-                    La caméra produit un JPEG et peut le traiter. Aucun défi web ni origine
-                    matérielle authentifiée n’est revendiqué. L’heure du téléphone n’est pas un
-                    horodatage qualifié.
-                  </p>
+                  )}
                 </section>
                 <section aria-label="Pièces du dossier">
                   <h2>Pièces et traçabilité</h2>
@@ -526,8 +472,8 @@ export default function MobileApp() {
                       </p>
                       <p>
                         {file.mobileEvidence
-                          ? file.mobileEvidence.origin === 'native_camera'
-                            ? 'Caméra Android — origine déclarée'
+                          ? file.mobileEvidence.origin !== 'system_file_picker'
+                            ? 'Caméra Android — capture documentée'
                             : 'Import original reçu — origine déclarée'
                           : file.capture
                             ? 'Capture web avec session'
@@ -544,7 +490,15 @@ export default function MobileApp() {
                           Heure du téléphone : {file.mobileEvidence.selectedAt}.{' '}
                           {file.mobileEvidence.transformation === 'camera_jpeg_processing'
                             ? 'Traitement JPEG possible par la caméra / le plugin.'
-                            : 'Aucune transformation par Preuvix.'}
+                            : file.mobileEvidence.transformation === 'camera_video_encoding'
+                              ? 'Vidéo encodée par la caméra intégrée ; octets reçus conservés.'
+                              : 'Aucune transformation par Preuvix.'}
+                        </p>
+                      )}
+                      {file.capture?.kind === 'video' && (
+                        <p>
+                          Position en fin de vidéo :{' '}
+                          {locationDescription(file.capture.location?.end)}
                         </p>
                       )}
                       <details>
@@ -567,26 +521,17 @@ export default function MobileApp() {
                 </section>
                 <section className="mobile-card">
                   <h2>Justificatifs disponibles</h2>
-                  {(['timestamp', 'anchor', 'signature'] as const).map((kind) => {
-                    const operation = detail.operations.find((op) => op.kind === kind);
-                    return (
-                      <p key={kind}>
-                        <strong>{serviceLabels[kind]}</strong> :{' '}
-                        {serviceStateLabel(
-                          kind,
-                          operation?.state,
-                          detail.services[kind].configured,
-                        )}
-                        {detail.services[kind].provider
-                          ? ` · ${detail.services[kind].provider}`
-                          : ''}
-                        {operation?.error ? ` · ${operation.error}` : ''}
-                      </p>
-                    );
-                  })}
+                  <ServiceEvidence dossier={detail} />
+                  <MobileCertificationActions
+                    key={detail.manifest.id + ':' + detail.manifest.version}
+                    dossier={detail}
+                    disabled={!!busy || !online}
+                    run={run}
+                    onChange={setDetail}
+                  />
                   <p className="mobile-small">
-                    La réception serveur et la signature technique du manifeste ne constituent pas
-                    un horodatage qualifié. Les demandes de prestation restent disponibles sur le
+                    La signature technique protège le manifeste. Elle ne certifie pas la réalité de
+                    la scène. La signature électronique auprès d’un prestataire se demande sur le
                     site web.
                   </p>
                   <SignatureControl attestation={detail.attestation} />

@@ -14,6 +14,7 @@ export type Draft = {
   file?: Blob;
   fileName?: string;
   evidence?: MobileEvidence;
+  captureId?: string;
   proof?: Proof;
   completed?: boolean;
   dossier?: CaseInput;

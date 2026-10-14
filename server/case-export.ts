@@ -62,11 +62,11 @@ export async function caseReport(detail: CaseDetail) {
     if (file.mobileEvidence) {
       const mobile = file.mobileEvidence;
       line(
-        `Origine déclarée : ${mobile.origin === 'native_camera' ? 'caméra Android' : 'sélecteur de fichiers Android'}.`,
+        `Origine déclarée : ${mobile.origin !== 'system_file_picker' ? 'caméra Android' : 'sélecteur de fichiers Android'}.`,
       );
       line(`Heure du téléphone (non qualifiée) : ${mobile.selectedAt}`);
       line(
-        `Transformation : ${mobile.transformation === 'none_by_preuvix' ? 'aucune par Preuvix' : 'JPEG produit par la caméra / le plugin, traitement possible'}.`,
+        `Transformation : ${mobile.transformation === 'none_by_preuvix' ? 'aucune par Preuvix' : mobile.transformation === 'camera_video_encoding' ? 'vidéo encodée en direct par la caméra intégrée' : 'JPEG produit par la caméra / le plugin, traitement possible'}.`,
       );
       line(
         `Localisation déclarative (${mobile.location.status === 'recorded' ? mobile.location.source : 'sans position'}) : ${locationDescription(mobile.location)}`,

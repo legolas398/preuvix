@@ -1045,7 +1045,8 @@ function ProofDetail({
           <div>
             <span>Source déclarée</span>
             <strong>
-              {proof.manifest.mobileEvidence?.origin === 'native_camera'
+              {proof.manifest.mobileEvidence &&
+              proof.manifest.mobileEvidence.origin !== 'system_file_picker'
                 ? 'Caméra Android (déclaratif)'
                 : proof.manifest.source === 'camera'
                   ? 'Caméra du navigateur'

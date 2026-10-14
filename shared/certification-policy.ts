@@ -122,7 +122,7 @@ export function assessCertification(manifest: Manifest): CertificationAssessment
         result: capture ? 'passed' : 'unverified',
         detail: capture
           ? 'Fichier lié à une session et une empreinte engagée auprès du serveur.'
-          : manifest.mobileEvidence?.origin === 'native_camera'
+          : manifest.mobileEvidence && manifest.mobileEvidence.origin !== 'system_file_picker'
             ? 'Photo produite par la caméra Android (déclaratif), sans défi de capture web vérifié. Traitement JPEG possible.'
             : 'Import sans session de capture vérifiée.',
       },

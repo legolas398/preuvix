@@ -455,8 +455,9 @@ export function createApp(
             JSON.parse(parsed.data.mobileEvidence || '{}'),
           );
           if (
-            (source === 'camera') !== (mobileEvidence.origin === 'native_camera') ||
-            parsed.data.captureId
+            source !== 'camera' ||
+            mobileEvidence.origin !== 'in_app_camera' ||
+            mobileEvidence.location.status !== 'recorded'
           )
             throw new Error();
         } else if (parsed.data.mobileEvidence) throw new Error();
@@ -506,7 +507,7 @@ export function createApp(
         return true;
       };
       if (existingResponse()) return;
-      if (!mobile && (source !== 'camera' || !parsed.data.captureId))
+      if (source !== 'camera' || !parsed.data.captureId)
         return void res.status(409).json({
           error:
             'Capture en direct avec localisation obligatoire. Les imports ne sont pas autorisés.',
@@ -521,6 +522,14 @@ export function createApp(
             hash(req.cookies.preuvix_session),
             fileHash,
           );
+          if (
+            mobileEvidence &&
+            (mobileEvidence.transformation !==
+              (capture.kind === 'video' ? 'camera_video_encoding' : 'camera_jpeg_processing') ||
+              mobileEvidence.selectedAt !== capture.startedAt ||
+              JSON.stringify(mobileEvidence.location) !== JSON.stringify(capture.location?.start))
+          )
+            throw new Error('La provenance mobile ne correspond pas à la capture engagée.');
         }
       } catch (error) {
         return void res.status(409).json({ error: (error as Error).message });
@@ -530,8 +539,6 @@ export function createApp(
         inspected = mobile
           ? await inspectMobileFile(req.file.buffer)
           : await inspectMedia(req.file.buffer);
-        if (mobile && source === 'camera' && !inspected.mime.startsWith('image/'))
-          throw new Error('La caméra doit produire une photo.');
       } catch (error) {
         return void res.status(400).json({ error: (error as Error).message });
       }

@@ -43,6 +43,12 @@ test('capture commitment is authenticated, immutable, session-bound and included
     await owner.post('/api/captures').send({}).expect(403);
     const session = (await owner.post('/api/captures').set('Origin', origin).send({}).expect(201))
       .body;
+    assert.equal(session.challenge, undefined);
+    // Historical challenges remain readable, reviewable and exportable after the policy change.
+    session.challenge = { code: 'ABC347', gesture: 'Montrez la main ouverte', maxSeconds: 180 };
+    store.db
+      .prepare('UPDATE capture_sessions SET session=? WHERE id=?')
+      .run(JSON.stringify(session), session.id);
     const bytes = await sharp({
       create: { width: 32, height: 24, channels: 3, background: '#cabbaa' },
     })
@@ -331,7 +337,7 @@ test('video validation decodes real MP4 and WebM, preserves bytes and rejects in
           .expect(201)
       ).body;
       assert.equal(proof.manifest.file.sha256, hash(bytes));
-      assert.equal(proof.manifest.certification.status, 'capture_challenged');
+      assert.equal(proof.manifest.certification.status, 'capture_documented');
       assert.ok(proof.manifest.file.durationSeconds > 0);
       assert.equal(hash(store.get(proof.id)!.original), hash(bytes));
       await agent.get(`/api/proofs/${proof.id}/report`).expect(200).expect('Content-Type', /pdf/);

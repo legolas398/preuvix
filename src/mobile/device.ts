@@ -1,6 +1,4 @@
 import { Capacitor } from '@capacitor/core';
-import { Camera } from '@capacitor/camera';
-import { FilePicker } from '@capawesome/capacitor-file-picker';
 import { Geolocation } from '@capacitor/geolocation';
 import { Filesystem, Directory } from '@capacitor/filesystem';
 import { Share } from '@capacitor/share';
@@ -31,43 +29,6 @@ export async function readLocation(): Promise<LocationSample> {
     const message = String((error as Error).message);
     return { status: /denied|permission|refus/i.test(message) ? 'denied' : 'unavailable' };
   }
-}
-export async function photoFile(photo: { webPath?: string; uri?: string }) {
-  const uri = photo.uri ? Capacitor.convertFileSrc(photo.uri) : photo.webPath;
-  if (!uri) throw new Error('La caméra n’a renvoyé aucun fichier.');
-  const response = await fetch(uri);
-  if (!response.ok) throw new Error('Impossible de lire la photo de la caméra.');
-  const blob = await response.blob();
-  return new File([blob], `capture-${Date.now()}.jpg`, { type: blob.type || 'image/jpeg' });
-}
-export async function capturePhoto() {
-  // No resizing, editing or gallery write. JPEG processing is explicitly disclosed in UI/manifest.
-  return photoFile(
-    await Camera.takePhoto({
-      quality: 100,
-      saveToGallery: false,
-      editable: 'no',
-      correctOrientation: false,
-    }),
-  );
-}
-export async function selectFile(photos: boolean) {
-  const result = photos
-    ? await FilePicker.pickImages({ limit: 1, readData: false, skipTranscoding: true })
-    : await FilePicker.pickFiles({
-        types: ['image/jpeg', 'image/png', 'image/webp', 'application/pdf'],
-        limit: 1,
-        readData: false,
-      });
-  const selected = result.files[0];
-  if (!selected) return null;
-  if (selected.size > 10 * 1024 * 1024)
-    throw new Error('Maximum 10 Mo. Le fichier n’a pas été compressé.');
-  if (!selected.blob && !selected.path)
-    throw new Error('Le sélecteur n’a pas fourni de fichier lisible.');
-  const blob =
-    selected.blob ?? (await (await fetch(Capacitor.convertFileSrc(selected.path!))).blob());
-  return new File([blob], selected.name, { type: selected.mimeType });
 }
 export async function shareDownload(path: string, name: string) {
   const response = await mobileFetch(path);

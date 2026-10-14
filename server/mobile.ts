@@ -1,8 +1,8 @@
 import type { Express } from 'express';
 import type { Config } from './config';
 import type { Store } from './store';
-import { hash, inspectImage } from './integrity';
-import { PDFDocument } from 'pdf-lib';
+import { hash } from './integrity';
+import { inspectMedia } from './media';
 
 export function mobileTransport(app: Express, config: Config, store: Store) {
   store.db.exec(
@@ -37,21 +37,6 @@ export function mobileTransport(app: Express, config: Config, store: Store) {
 }
 
 export async function inspectMobileFile(bytes: Buffer) {
-  if (bytes.length > 10 * 1024 * 1024) throw new Error('Maximum 10 Mo par pièce.');
-  if (!bytes.subarray(0, 5).equals(Buffer.from('%PDF-'))) return inspectImage(bytes);
-  const pdf = await PDFDocument.load(bytes, { ignoreEncryption: false });
-  if (!pdf.getPageCount() || pdf.getPageCount() > 500)
-    throw new Error('PDF invalide ou plus de 500 pages.');
-  return {
-    width: 0,
-    height: 0,
-    mime: 'application/pdf',
-    provenance: {
-      result: 'inconclusive' as const,
-      signals: [],
-      credentialsDetected: false,
-      explanation:
-        'Document PDF importé. Octets conservés ; contenu, origine et signatures PDF non authentifiés.',
-    },
-  };
+  if (bytes.length > 50 * 1024 * 1024) throw new Error('Maximum 50 Mo par vidéo.');
+  return inspectMedia(bytes);
 }

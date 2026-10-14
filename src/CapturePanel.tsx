@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import type { CaptureSession, LocationSample } from '../shared/capture';
+import type { CaptureRecord, CaptureSession, LocationSample } from '../shared/capture';
 import { readCaptureLocation } from './capture-location';
 import { sha256File } from './file-hash';
 import './capture.css';
@@ -17,9 +17,15 @@ async function post<T>(url: string, body: unknown): Promise<T> {
 export default function CapturePanel({
   onCapture,
   close,
+  request = post,
+  readPosition = () => readCaptureLocation(true),
+  photosOnly = false,
 }: {
-  onCapture: (file: File, captureId: string) => void;
+  onCapture: (file: File, captureId: string, record: CaptureRecord) => void;
   close: () => void;
+  request?: <T>(url: string, body: unknown) => Promise<T>;
+  readPosition?: () => Promise<LocationSample>;
+  photosOnly?: boolean;
 }) {
   const video = useRef<HTMLVideoElement>(null);
   const stream = useRef<MediaStream | null>(null);
@@ -39,11 +45,12 @@ export default function CapturePanel({
     const interval = setInterval(() => setNow(Date.now()), 1000);
     return () => clearInterval(interval);
   }, []);
-  const remaining = session?.challenge
+  const remaining = session
     ? Math.max(
         0,
         Math.round(
-          (Date.parse(session.issuedAt) + session.challenge.maxSeconds * 1000 - now) / 1000,
+          (Math.min(Date.parse(session.expiresAt), Date.parse(session.issuedAt) + 180000) - now) /
+            1000,
         ),
       )
     : 0;
@@ -74,7 +81,7 @@ export default function CapturePanel({
       }
       stream.current = media;
       if (video.current) video.current.srcObject = media;
-      const issued = await post<CaptureSession>('/api/captures', {});
+      const issued = await request<CaptureSession>('/api/captures', {});
       if (!cancelled) setSession(issued);
     })().catch(() => {
       if (!cancelled) {
@@ -91,7 +98,7 @@ export default function CapturePanel({
       if (recorder.current?.state === 'recording') recorder.current.stop();
       stream.current?.getTracks().forEach((track) => track.stop());
     };
-  }, [audio, attempt]);
+  }, [audio, attempt, request]);
   useEffect(() => {
     if (!recording) return;
     const interval = setInterval(() => setSeconds((value) => value + 1), 1000);
@@ -108,14 +115,14 @@ export default function CapturePanel({
     setBusy(true);
     setError('');
     try {
-      const endLocation = kind === 'video' ? await readCaptureLocation(true) : undefined;
+      const endLocation = kind === 'video' ? await readPosition() : undefined;
       if (endLocation && endLocation.status !== 'recorded')
         throw new Error(
           'Localisation de fin obligatoire. Autorisez la position puis recommencez la vidéo.',
         );
       const sha256 = await sha256File(file);
       if (!alive.current) return;
-      await post(`/api/captures/${session.id}/commit`, {
+      const record = await request<CaptureRecord>(`/api/captures/${session.id}/commit`, {
         sha256,
         kind,
         startedAt,
@@ -123,7 +130,7 @@ export default function CapturePanel({
         nonce: session.nonce,
         location: { start: startLocation, ...(endLocation ? { end: endLocation } : {}) },
       });
-      if (alive.current) onCapture(file, session.id);
+      if (alive.current) onCapture(file, session.id, record);
     } catch (e) {
       if (alive.current)
         setError((e as Error).message + ' Recommencez une session avant une nouvelle capture.');
@@ -134,7 +141,7 @@ export default function CapturePanel({
   async function photo() {
     if (!video.current?.videoWidth) return;
     setBusy(true);
-    const startLocation = await readCaptureLocation(true);
+    const startLocation = await readPosition();
     if (!alive.current) return;
     if (startLocation.status !== 'recorded') {
       setBusy(false);
@@ -182,7 +189,7 @@ export default function CapturePanel({
     }
     try {
       setBusy(true);
-      const startLocation = await readCaptureLocation(true);
+      const startLocation = await readPosition();
       if (!alive.current) return;
       if (startLocation.status !== 'recorded') {
         setBusy(false);
@@ -245,11 +252,13 @@ export default function CapturePanel({
   }
   return (
     <div className="capture-protocol">
-      <span className="eyebrow">CAPTURE DOCUMENTÉE · PHOTO / VIDÉO</span>
+      <span className="eyebrow">CAPTURE DOCUMENTÉE · {photosOnly ? 'PHOTO' : 'PHOTO / VIDÉO'}</span>
       <ol>
-        <li>Écrivez le code du défi sur un papier et préparez le geste demandé.</li>
-        <li>Cadrez les faits avec le papier et le geste visibles, sans filtre.</li>
-        <li>Photographiez ou filmez (60 s maximum) avant la fin du compte à rebours.</li>
+        <li>Autorisez la caméra et la localisation, puis cadrez les faits sans filtre.</li>
+        <li>
+          {photosOnly ? 'Prenez une photo en direct.' : 'Photographiez ou filmez (60 s maximum).'}{' '}
+          Aucun import de fichier.
+        </li>
         <li>
           L’empreinte est engagée auprès du serveur, puis vous décrivez et déposez le fichier.
         </li>
@@ -262,33 +271,24 @@ export default function CapturePanel({
         refus ou une indisponibilité bloque la capture. Aucune localisation en arrière-plan. Ces
         coordonnées déclarées par l’appareil ne prouvent pas le lieu réel de la scène.
       </p>
-      <label className="capture-check">
-        <input
-          type="checkbox"
-          checked={audio}
-          disabled={recording || busy}
-          onChange={(e) => setAudio(e.target.checked)}
-        />{' '}
-        Inclure le son (permission microphone)
-      </label>
-      {session?.challenge && (
-        <section className="capture-challenge" aria-label="Défi en direct">
-          <span>DÉFI EN DIRECT · à montrer dans l’image</span>
-          <strong>{session.challenge.code}</strong>
-          <span>{session.challenge.gesture}</span>
-          <span>
-            {remaining > 0
-              ? `Temps restant : ${Math.floor(remaining / 60)}:${String(remaining % 60).padStart(2, '0')}`
-              : 'Délai dépassé : le défi ne sera pas reconnu. Recommencez la session.'}
-          </span>
-        </section>
+      {!photosOnly && (
+        <label className="capture-check">
+          <input
+            type="checkbox"
+            checked={audio}
+            disabled={recording || busy}
+            onChange={(e) => setAudio(e.target.checked)}
+          />{' '}
+          Inclure le son (permission microphone)
+        </label>
       )}
       {session && (
         <p className="capture-session">
-          Session ouverte : {new Date(session.issuedAt).toLocaleTimeString('fr-FR')} · défi{' '}
-          <code>{session.nonce.slice(0, 12)}</code>
+          Session ouverte : {new Date(session.issuedAt).toLocaleTimeString('fr-FR')}
           <br />
-          Le serveur refuse l’engagement après expiration du défi de 3 minutes.
+          {remaining > 0
+            ? `Session valable encore ${remaining} secondes.`
+            : 'Session expirée. Recommencez la capture.'}
         </p>
       )}
       <p>
@@ -296,7 +296,7 @@ export default function CapturePanel({
         possibles ; ce protocole ne certifie pas « sans IA ».
       </p>
       {recording && <p role="status">Enregistrement · {seconds} / 60 s</p>}
-      {!recording && remaining > 0 && remaining < 75 && (
+      {!photosOnly && !recording && remaining > 0 && remaining < 75 && (
         <p>
           Moins de 75 secondes restantes : recommencez la session pour filmer avec le temps
           nécessaire à l’engagement.
@@ -319,13 +319,15 @@ export default function CapturePanel({
             >
               Prendre la photo
             </button>
-            <button
-              className="button primary"
-              disabled={!ready || !session || busy || !!error || remaining < 75}
-              onClick={startVideo}
-            >
-              Filmer une vidéo
-            </button>
+            {!photosOnly && (
+              <button
+                className="button primary"
+                disabled={!ready || !session || busy || !!error || remaining < 75}
+                onClick={startVideo}
+              >
+                Filmer une vidéo
+              </button>
+            )}
           </>
         )}
         {recording && (
@@ -333,7 +335,7 @@ export default function CapturePanel({
             Terminer la vidéo
           </button>
         )}
-        {(error || (session?.challenge && remaining < 75)) && (
+        {(error || (session && remaining < 75)) && (
           <button
             className="button secondary"
             disabled={busy || recording}

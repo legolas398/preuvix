@@ -14,6 +14,7 @@ RUN npm ci --omit=dev && mkdir /app/data && chown node:node /app/data
 COPY --from=build /app/dist ./dist
 COPY --from=build /app/server ./server
 COPY --from=build /app/shared ./shared
+COPY --from=build /app/scripts ./scripts
 USER node
 EXPOSE 3000
 CMD ["npm", "start"]

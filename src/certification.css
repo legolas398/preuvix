@@ -1,0 +1,19 @@
+.certification-scope {
+  grid-column: 1 / -1;
+  padding: 14px;
+  border-left: 3px solid var(--accent, #ad4b18);
+  background: var(--surface, #fffdfa);
+}
+.mobile-app .case-service {
+  padding: 16px 0;
+  border-bottom: 1px solid #ad4b1838;
+  overflow-wrap: anywhere;
+}
+.mobile-app .case-service h3 {
+  margin-top: 0;
+}
+.mobile-app .certification-actions {
+  display: grid;
+  gap: 12px;
+  margin-top: 20px;
+}

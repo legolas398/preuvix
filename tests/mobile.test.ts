@@ -1,6 +1,8 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, writeFileSync, rmSync } from 'node:fs';
+import { mkdtempSync, writeFileSync, readFileSync, rmSync } from 'node:fs';
+import { execFileSync } from 'node:child_process';
+import { createRequire } from 'node:module';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { generateKeyPairSync, randomUUID } from 'node:crypto';
@@ -28,7 +30,7 @@ test('production mobile configuration rejects development destinations', () => {
   assert.equal(backendOrigin('http://10.0.2.2:3000', true), 'http://10.0.2.2:3000');
 });
 
-test('mobile owner session, CORS, exact imports, PDF export, retry and expiry; web policy remains intact', async (t) => {
+test('mobile live capture requires location and commitment, rejects imports, preserves exports and retry', async (t) => {
   const directory = mkdtempSync(path.join(tmpdir(), 'preuvix-mobile-'));
   writeFileSync(
     path.join(directory, 'attestation-ed25519.pem'),
@@ -84,26 +86,96 @@ test('mobile owner session, CORS, exact imports, PDF export, retry and expiry; w
   })
     .png()
     .toBuffer();
-  const evidence = {
-    origin: 'system_file_picker',
-    selectedAt: new Date().toISOString(),
-    transformation: 'none_by_preuvix',
-    location: { status: 'denied' },
+  const session = (await request(app).post('/api/captures').set(headers).send({}).expect(201)).body;
+  assert.equal(session.challenge, undefined);
+  const at = new Date().toISOString();
+  const location = {
+    status: 'recorded',
+    source: 'android_geolocation',
+    latitude: 48.8566,
+    longitude: 2.3522,
+    accuracy: 12,
+    measuredAt: at,
   };
+  const evidence = {
+    origin: 'in_app_camera',
+    selectedAt: at,
+    transformation: 'camera_jpeg_processing',
+    location,
+  };
+  const commit = {
+    nonce: session.nonce,
+    sha256: hash(image),
+    kind: 'photo',
+    startedAt: at,
+    endedAt: at,
+    location: { start: location },
+  };
+  for (const status of ['denied', 'unavailable', 'not_requested']) {
+    await request(app)
+      .post('/api/captures/' + session.id + '/commit')
+      .set(headers)
+      .send({ ...commit, location: { start: { status } } })
+      .expect(409);
+  }
+  await request(app)
+    .post('/api/captures/' + session.id + '/commit')
+    .set(headers)
+    .send({
+      ...commit,
+      location: { start: { ...location, measuredAt: '2000-01-01T00:00:00.000Z' } },
+    })
+    .expect(409);
   const key = randomUUID();
-  const upload = (bytes: Buffer, name: string, requestKey = key, metadata = evidence) =>
-    request(app)
+  const upload = (
+    bytes: Buffer,
+    name: string,
+    requestKey = key,
+    metadata: object = evidence,
+    source = 'camera',
+    captureId: string | undefined = session.id,
+  ) => {
+    const pending = request(app)
       .post('/api/mobile/proofs')
       .set(headers)
       .field('title', name)
-      .field('source', 'upload')
+      .field('source', source)
       .field('requestKey', requestKey)
       .field('clientSha256', hash(bytes))
-      .field('mobileEvidence', JSON.stringify(metadata))
-      .attach('file', bytes, name);
+      .field('mobileEvidence', JSON.stringify(metadata));
+    if (captureId) pending.field('captureId', captureId);
+    return pending.attach('file', bytes, name);
+  };
+  await upload(image, 'photo.png').expect(409); // Session exists but no hash was committed.
+  await request(app)
+    .post('/api/captures/' + session.id + '/commit')
+    .set(headers)
+    .send(commit)
+    .expect(200);
+  await upload(image, 'photo.png', randomUUID(), evidence, 'camera', '').expect(409);
+  await upload(
+    image,
+    'photo.png',
+    randomUUID(),
+    { ...evidence, origin: 'system_file_picker', transformation: 'none_by_preuvix' },
+    'upload',
+  ).expect(400);
+  for (const status of ['denied', 'unavailable', 'not_requested'])
+    await upload(image, 'photo.png', randomUUID(), { ...evidence, location: { status } }).expect(
+      400,
+    );
+  await upload(image, 'photo.png', randomUUID(), {
+    ...evidence,
+    location: { ...location, latitude: 49 },
+  }).expect(409);
+  await upload(image, 'photo.png', randomUUID(), { ...evidence, origin: 'native_camera' }).expect(
+    400,
+  );
   const proof = (await upload(image, 'photo.png').expect(201)).body;
-  assert.equal(proof.manifest.mobileEvidence.location.status, 'denied');
-  assert.equal(proof.manifest.capture, undefined);
+  assert.equal(proof.manifest.mobileEvidence.location.status, 'recorded');
+  assert.equal(proof.manifest.capture.id, session.id);
+  assert.equal(proof.manifest.capture.challenge, undefined);
+  assert.equal(proof.manifest.certification.status, 'capture_documented');
   assert.equal(proof.status, 'pending');
   assert.equal(proof.receipt, null);
   assert.equal((await upload(image, 'photo.png').expect(200)).body.id, proof.id);
@@ -114,54 +186,104 @@ test('mobile owner session, CORS, exact imports, PDF export, retry and expiry; w
     .send({ proofId: proof.id, expectedVersion: 1 })
     .expect(201);
   const original = await request(app)
-    .get(`/api/proofs/${proof.id}/original`)
+    .get('/api/proofs/' + proof.id + '/original')
     .set(headers)
     .expect(200);
   assert.deepEqual(original.body, image);
   const pdf = await PDFDocument.create();
   pdf.addPage();
   const bytes = Buffer.from(await pdf.save());
-  const document = (await upload(bytes, 'piece.pdf', randomUUID()).expect(201)).body;
-  assert.equal(document.manifest.file.mime, 'application/pdf');
-  assert.equal(document.manifest.file.sha256, hash(bytes));
+  await upload(
+    bytes,
+    'piece.pdf',
+    randomUUID(),
+    { ...evidence, origin: 'system_file_picker', transformation: 'none_by_preuvix' },
+    'upload',
+  ).expect(400);
+  const pdfSession = (await request(app).post('/api/captures').set(headers).send({}).expect(201))
+    .body;
   await request(app)
-    .get(`/api/proofs/${document.id}/report`)
+    .post('/api/captures/' + pdfSession.id + '/commit')
+    .set(headers)
+    .send({ ...commit, nonce: pdfSession.nonce, sha256: hash(bytes) })
+    .expect(200);
+  await upload(bytes, 'piece.pdf', randomUUID(), evidence, 'camera', pdfSession.id).expect(400);
+  await request(app)
+    .get('/api/cases/' + dossier.manifest.id + '/report?version=2')
     .set(headers)
     .expect('Content-Type', /pdf/)
     .expect(200);
   await request(app)
-    .post('/api/cases/' + dossier.manifest.id + '/files')
-    .set(headers)
-    .send({ proofId: document.id, expectedVersion: 2 })
-    .expect(201);
-  await request(app)
-    .get('/api/cases/' + dossier.manifest.id + '/report?version=3')
-    .set(headers)
-    .expect('Content-Type', /pdf/)
-    .expect(200);
-  await request(app)
-    .get('/api/cases/' + dossier.manifest.id + '/export?version=3&originals=true')
+    .get('/api/cases/' + dossier.manifest.id + '/export?version=2&originals=true')
     .set(headers)
     .expect(200);
-  // Camera bytes are declared native, never assigned the web live-challenge status.
-  const native = await request(app)
-    .post('/api/mobile/proofs')
-    .set(headers)
-    .field('title', 'capture')
-    .field('source', 'camera')
-    .field('requestKey', randomUUID())
-    .field('clientSha256', hash(image))
-    .field(
-      'mobileEvidence',
-      JSON.stringify({
-        ...evidence,
-        origin: 'native_camera',
-        transformation: 'camera_jpeg_processing',
-      }),
-    )
-    .attach('file', image, 'capture.png')
-    .expect(201);
-  assert.equal(native.body.manifest.capture, undefined);
+  const ffmpeg = createRequire(import.meta.url)('ffmpeg-static') as string;
+  for (const format of ['mp4', 'webm']) {
+    const file = path.join(directory, `live.${format}`);
+    execFileSync(
+      ffmpeg,
+      [
+        '-f',
+        'lavfi',
+        '-i',
+        'color=c=blue:s=160x120:d=1',
+        '-c:v',
+        format === 'mp4' ? 'libx264' : 'libvpx',
+        file,
+      ],
+      { windowsHide: true, timeout: 20000, stdio: 'ignore' },
+    );
+    const video = readFileSync(file);
+    const live = (await request(app).post('/api/captures').set(headers).send({}).expect(201)).body;
+    const now = new Date().toISOString();
+    const start = { ...location, measuredAt: now };
+    const payload = {
+      nonce: live.nonce,
+      kind: 'video',
+      sha256: hash(video),
+      startedAt: now,
+      endedAt: now,
+      location: { start, end: start },
+    };
+    await request(app)
+      .post(`/api/captures/${live.id}/commit`)
+      .set(headers)
+      .send({ ...payload, location: { start } })
+      .expect(409);
+    await request(app)
+      .post(`/api/captures/${live.id}/commit`)
+      .set(headers)
+      .send({ ...payload, location: { start, end: { status: 'denied' } } })
+      .expect(409);
+    await request(app)
+      .post(`/api/captures/${live.id}/commit`)
+      .set(headers)
+      .send(payload)
+      .expect(200);
+    const metadata = {
+      ...evidence,
+      selectedAt: now,
+      location: start,
+      transformation: 'camera_video_encoding',
+    };
+    await upload(
+      video,
+      `live.${format}`,
+      randomUUID(),
+      { ...metadata, transformation: 'camera_jpeg_processing' },
+      'camera',
+      live.id,
+    ).expect(409);
+    await upload(video, `live.${format}`, randomUUID(), metadata, 'upload', live.id).expect(400);
+    const accepted = (
+      await upload(video, `live.${format}`, randomUUID(), metadata, 'camera', live.id).expect(201)
+    ).body;
+    assert.equal(accepted.manifest.file.mime, `video/${format}`);
+    assert.equal(accepted.manifest.capture.location.end.status, 'recorded');
+    assert.equal(accepted.manifest.mobileEvidence.transformation, 'camera_video_encoding');
+    assert.equal(accepted.manifest.certification.status, 'capture_documented');
+    assert.equal(hash(store.get(accepted.id)!.original), hash(video));
+  }
   await request(app)
     .get('/api/cases')
     .set({ ...headers, Origin: 'https://evil.example' })

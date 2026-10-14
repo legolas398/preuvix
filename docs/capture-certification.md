@@ -2,28 +2,30 @@
 
 Le protocole accepte une photo (JPEG, PNG, WebP, 10 Mo) ou une vidéo (MP4/WebM, 50 Mo, 120 s, 3840 × 2160 maximum). La caméra du navigateur produit une photo JPEG ou un enregistrement de 60 s maximum. Le microphone est désactivé par défaut. HTTPS ou localhost est nécessaire pour la caméra et le SHA-256 ; l’adresse réseau HTTP ne permet pas ces fonctions.
 
-1. L’utilisateur connecté ouvre la caméra. Le serveur émet une session aléatoire liée à sa connexion et un **défi en direct** : un code de 6 caractères et un geste tirés au hasard. Le code doit être écrit à la main et montré dans l’image avec le geste. Le serveur refuse tout nouvel engagement après 180 secondes, même si la session est encore conservée. L’engagement doit aussi renvoyer le nonce exact de la session.
+1. L’utilisateur connecté ouvre la caméra en direct. Le serveur émet une session aléatoire liée à sa connexion. Aucun code manuscrit ni geste n’est demandé, sur le site comme sur Android. Le serveur refuse tout nouvel engagement après 180 secondes, même si la session est encore conservée. L’engagement doit aussi renvoyer le nonce exact de la session.
 2. Le navigateur encode le média, calcule son SHA-256 et engage cette empreinte auprès du serveur. Cet engagement est immuable et idempotent. Les dates du navigateur sont explicitement déclaratives ; la date de réception du serveur n’est pas un horodatage indépendant.
 3. Le déposant relit le média, ajoute le contexte et, facultativement, une déclaration de bonne foi avec un auteur déclaré. L’identité n’est pas vérifiée. Le dépôt doit avoir lieu dans les 24 heures de l’engagement.
 4. Le serveur recalcule l’empreinte, vérifie la session et décode le média. Il conserve les octets reçus sans conversion, fige le manifeste et signe ses octets exacts avec Ed25519. Les nouveaux imports sont refusés : une session de capture en direct avec localisation est obligatoire. Les dossiers historiques restent lisibles.
 5. Si un prestataire RFC 3161 est configuré, le manifeste est soumis à l’horodatage existant. Sinon le statut reste « en attente ». Aucune date qualifiée n’est inventée.
 6. Le PDF imprimable décrit les contrôles, les déclarations, les empreintes, la signature et les limites. Le ZIP contient l’original, le manifeste exact, sa signature, la clé publique, l’attestation JSON, le PDF et, si obtenu, le jeton d’horodatage.
 
-## Défi en direct
+## Session en direct sans défi visuel
 
 Les dates déclarées sont contrôlées avec une tolérance de 30 secondes par rapport à l’émission et à la réception serveur. Une durée supérieure à 10 secondes pour la création de la photo ou 65 secondes pour la vidéo du navigateur est refusée. Une nouvelle capture exige une nouvelle session ; une répétition identique de l’engagement reste idempotente, mais une modification des coordonnées, du nonce ou du fichier est refusée. Les anciens dossiers restent lisibles ; recharger les onglets de capture ouverts avant cette mise à jour.
 
 ## Localisation consentie
 
-La localisation est obligatoire. Le navigateur demande une position fraîche (`maximumAge: 0`, précision élevée demandée, délai limité) juste avant la photo ou le démarrage de la vidéo, puis à la fin de la vidéo. Chaque relevé comprend latitude, longitude, précision annoncée en mètres et date de mesure. Aucun suivi en arrière-plan ni géocodage externe n’est effectué. Permission refusée ou position indisponible : la capture est bloquée. Le serveur refuse les engagements sans coordonnées, les relevés incohérents de plus de 30 secondes et les vidéos sans relevé de fin. Une session antérieure sans localisation ne peut pas servir à un nouveau dépôt.
+La localisation est obligatoire sur le site et Android. Android prend des photos et vidéos en direct dans sa caméra intégrée, sans imports photo/vidéo/PDF, et exige le même engagement de session. Le navigateur demande une position fraîche (`maximumAge: 0`, précision élevée demandée, délai limité) juste avant la photo ou le démarrage de la vidéo, puis à la fin de la vidéo. Chaque relevé comprend latitude, longitude, précision annoncée en mètres et date de mesure. Aucun suivi en arrière-plan ni géocodage externe n’est effectué. Permission refusée ou position indisponible : la capture est bloquée. Le serveur refuse les engagements sans coordonnées, les relevés incohérents de plus de 30 secondes et les vidéos sans relevé de fin. Une session antérieure sans localisation ne peut pas servir à un nouveau dépôt.
 
 Le serveur valide les bornes et refuse un relevé distant de plus de 30 secondes du moment de capture déclaré. Les données sont figées dans l’engagement, le manifeste signé et les exports, et affichées dans le dossier et le PDF. Elles ne sont pas exposées par la page publique de comparaison d’empreintes ni par les sélections Premium. Un export complet ou un ancien lien de consultation du dossier complet peut les divulguer à son destinataire.
 
 La signature protège les coordonnées enregistrées contre une modification ultérieure ; elle n’authentifie ni un GPS matériel, ni le lieu réel de la scène. Une position simulée reste possible, et deux relevés vidéo ne reconstituent pas le trajet. Les fichiers importés et les dossiers antérieurs n’obtiennent pas de localisation rétroactive. Référence : [API Geolocation du navigateur](https://developer.mozilla.org/en-US/docs/Web/API/Geolocation/getCurrentPosition).
 
-## Examen du défi
+## Défis historiques uniquement
 
-Un média préparé à l’avance, ou généré, ne peut pas contenir un code tiré au hasard quelques secondes avant sa capture. Le défi (code, geste, délai entre l’émission et l’engagement) est figé dans le manifeste signé. Si l’engagement intervient dans le délai, le dossier reçoit le statut `capture_challenged`. Sa présence dans l’image reste à **vérifier visuellement** : dans le dossier, un vérificateur indique « visible et conforme », « absent ou non conforme » ou « illisible ». Chaque vérification est signée séparément (Ed25519, `preuvix-challenge-review-v1`), liée à l’empreinte du manifeste, conservée en ajout seul et exportée dans `reviews.json`. Le nom du vérificateur est déclaré, pas authentifié. La vérification d’un tiers indépendant a plus de poids que celle du déposant.
+Les nouvelles sessions ne contiennent plus de défi. Une capture valide reçoit normalement `capture_documented`, jamais `capture_challenged` sans défi. Les anciens manifestes et leurs vérifications restent consultables et exportables sans modification.
+
+Dans les anciens dossiers, le code aléatoire devait apparaître dans l’image pour permettre un examen visuel. Le défi (code, geste, délai entre l’émission et l’engagement) est figé dans le manifeste signé. Si l’engagement intervient dans le délai, le dossier reçoit le statut `capture_challenged`. Sa présence dans l’image reste à **vérifier visuellement** : dans le dossier, un vérificateur indique « visible et conforme », « absent ou non conforme » ou « illisible ». Chaque vérification est signée séparément (Ed25519, `preuvix-challenge-review-v1`), liée à l’empreinte du manifeste, conservée en ajout seul et exportée dans `reviews.json`. Le nom du vérificateur est déclaré, pas authentifié. La vérification d’un tiers indépendant a plus de poids que celle du déposant.
 
 Limites : une génération IA en temps réel pilotée par un opérateur, une caméra virtuelle ou un écran filmé peuvent reproduire un défi. Le défi élève le coût d’une falsification ; il ne l’exclut pas.
 
@@ -38,7 +40,7 @@ Certains appareils (Leica, Sony, Nikon, Canon, Google Pixel, Samsung récents…
 | `invalid`         | Fichier modifié après signature ou manifeste corrompu                                 | `review_required`                                          |
 | IA déclarée       | `trainedAlgorithmicMedia`, `compositeWithTrainedAlgorithmicMedia`…                    | `review_required`                                          |
 
-Pour activer la confiance, télécharger la liste de confiance C2PA officielle (PEM) et renseigner son chemin dans `C2PA_TRUST_ANCHORS`. Sans ancre, aucun signataire n’est présenté comme de confiance. La caméra du navigateur ne produit pas de C2PA : ce statut concerne les imports depuis un appareil compatible. Une signature d’appareil atteste l’origine matérielle, pas la scène : un écran ou une mise en scène photographiés restent possibles.
+Pour activer la confiance, télécharger la liste de confiance C2PA officielle (PEM) et renseigner son chemin dans `C2PA_TRUST_ANCHORS`. Sans ancre, aucun signataire n’est présenté comme de confiance. La caméra du navigateur ne produit pas de C2PA : ce statut concerne notamment les dossiers historiques importés depuis un appareil compatible ; les nouveaux imports sont interdits. Une signature d’appareil atteste l’origine matérielle, pas la scène : un écran ou une mise en scène photographiés restent possibles.
 
 ## Politique `preuvix-media-v2`
 

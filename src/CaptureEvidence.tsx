@@ -30,8 +30,10 @@ export function CaptureLocation({
       {mobileEvidence && (
         <p>
           Origine déclarée :{' '}
-          {mobileEvidence.origin === 'native_camera'
-            ? 'caméra Android, traitement JPEG possible'
+          {mobileEvidence.origin !== 'system_file_picker'
+            ? mobileEvidence.transformation === 'camera_video_encoding'
+              ? 'caméra Android, vidéo encodée en direct'
+              : 'caméra Android, traitement JPEG possible'
             : 'import, octets reçus sans transformation par Preuvix'}
           . Heure du téléphone au lancement de l’action (non qualifiée) :{' '}
           {mobileEvidence.selectedAt}.
