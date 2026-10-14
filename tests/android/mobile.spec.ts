@@ -14,6 +14,7 @@ test('mobile login, dossier, denied location, lost upload response, retry and PD
   let token = '';
   const uploadIds: string[] = [];
   const errors: string[] = [];
+  const { backend } = JSON.parse(await readFile('dist-android/mobile-build.json', 'utf8'));
   page.on('pageerror', (error) => errors.push(error.message));
   await page.route('https://localhost/**', async (route) => {
     const pathname = new URL(route.request().url()).pathname;
@@ -28,9 +29,9 @@ test('mobile login, dossier, denied location, lost upload response, retry and PD
           : 'application/octet-stream';
     await route.fulfill({ body: await readFile(file), contentType: type });
   });
-  await page.route('http://10.0.2.2:3000/api/**', async (route) => {
+  await page.route(`${backend}/api/**`, async (route) => {
     const response = await route.fetch({
-      url: route.request().url().replace('http://10.0.2.2:3000', 'http://localhost:3013'),
+      url: route.request().url().replace(backend, 'http://localhost:3013'),
       headers: { ...route.request().headers(), origin: 'https://localhost' },
     });
     if (route.request().url().endsWith('/mobile/login') && route.request().method() === 'POST')
@@ -52,6 +53,8 @@ test('mobile login, dossier, denied location, lost upload response, retry and PD
     await route.fulfill({ response });
   });
   await page.addInitScript(() => {
+    // A USB tunnel may work even when the OS reports no Internet connection.
+    Object.defineProperty(navigator, 'onLine', { get: () => false });
     Object.defineProperty(navigator, 'geolocation', {
       value: {
         getCurrentPosition(success: (value: unknown) => void, failure: (error: unknown) => void) {
@@ -93,12 +96,14 @@ test('mobile login, dossier, denied location, lost upload response, retry and PD
   });
   for (const mode of ['denied', 'unavailable']) {
     await page.evaluate((mode) => sessionStorage.setItem('location-mode', mode), mode);
-    await page.getByRole('button', { name: 'Prendre la photo', exact: true }).click();
+    if (mode === 'unavailable')
+      await page.getByRole('button', { name: 'Recommencer la session' }).click();
     await expect(page.getByRole('alert')).toContainText('Localisation obligatoire');
+    await expect(page.getByRole('button', { name: 'Prendre la photo', exact: true })).toBeDisabled();
     expect(commits).toBe(0);
-    await page.getByRole('button', { name: 'Recommencer la session' }).click();
   }
   await page.evaluate(() => sessionStorage.setItem('location-mode', 'granted'));
+  await page.getByRole('button', { name: 'Recommencer la session' }).click();
   await page.getByRole('button', { name: 'Prendre la photo', exact: true }).click();
   const draft = page
     .getByRole('article')
@@ -150,7 +155,7 @@ test('mobile login, dossier, denied location, lost upload response, retry and PD
   await expect(page.getByRole('heading', { name: title, exact: true })).toBeVisible();
   // Simulate a configured provider without publishing a real blockchain transaction.
   let requestedVersion = 0;
-  await page.route('http://10.0.2.2:3000/api/cases/**', async (route) => {
+  await page.route(`${backend}/api/cases/**`, async (route) => {
     if (route.request().url().endsWith('/services/anchor')) {
       const body = route.request().postDataJSON();
       expect(body.consent).toBe(true);
@@ -163,7 +168,7 @@ test('mobile login, dossier, denied location, lost upload response, retry and PD
     )
       return route.fallback();
     const response = await route.fetch({
-      url: route.request().url().replace('http://10.0.2.2:3000', 'http://localhost:3013'),
+      url: route.request().url().replace(backend, 'http://localhost:3013'),
       headers: { ...route.request().headers(), origin: 'https://localhost' },
     });
     const detail = await response.json();

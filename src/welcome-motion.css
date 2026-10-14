@@ -1,0 +1,228 @@
+/* Motion is an enhancement: content is visible without observers or JavaScript. */
+html:has(.homepage[data-motion='on']) {
+  scroll-behavior: smooth;
+}
+.welcome.homepage {
+  --section-ease: cubic-bezier(0.22, 1, 0.36, 1);
+}
+.homepage .welcome-header {
+  position: sticky;
+  top: 0;
+  z-index: 1100;
+  background: color-mix(in srgb, var(--w-bg) 94%, transparent);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  transition:
+    box-shadow 240ms ease,
+    background-color 240ms ease;
+}
+.homepage[data-scrolled='true'] .welcome-header {
+  box-shadow: 0 10px 30px color-mix(in srgb, var(--w-ink) 7%, transparent);
+}
+.homepage .welcome-reading-progress {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: -1px;
+  height: 2px;
+  background: linear-gradient(90deg, var(--w-accent), var(--glow-two));
+  transform: scaleX(var(--reading-progress, 0));
+  transform-origin: left;
+  pointer-events: none;
+}
+.homepage .welcome-header nav a {
+  position: relative;
+  padding: 10px 0;
+  white-space: nowrap;
+}
+.homepage .welcome-header nav a::after {
+  content: '';
+  position: absolute;
+  inset: auto 0 2px;
+  height: 2px;
+  border-radius: 2px;
+  background: var(--w-accent);
+  transform: scaleX(0);
+  transform-origin: left;
+  transition: transform 220ms ease;
+}
+.homepage .welcome-header nav a[aria-current='location'] {
+  color: var(--w-accent);
+}
+.homepage .welcome-header nav a:is(:hover, :focus-visible, [aria-current='location'])::after {
+  transform: scaleX(1);
+}
+.welcome.homepage :is(.welcome-section, #commissaires) {
+  scroll-margin-top: 124px;
+}
+.homepage .welcome-skip-link {
+  position: fixed;
+  top: 8px;
+  left: 16px;
+  z-index: 1200;
+  padding: 12px 20px;
+  background: var(--w-button);
+  color: var(--w-on-button);
+  border-radius: 10px;
+  transform: translateY(-160%);
+}
+.homepage .welcome-skip-link:focus {
+  transform: translateY(0);
+}
+.homepage[data-motion='on'] main > section[data-reveal] {
+  transition:
+    opacity 650ms var(--section-ease),
+    transform 650ms var(--section-ease);
+}
+.homepage[data-motion='on'] main > section[data-reveal='pending']:not(:focus-within):not(:target) {
+  opacity: 0;
+  transform: translateY(24px);
+}
+.homepage[data-motion='on']
+  main
+  > section[data-reveal='visible']
+  :is(.plans-grid, .welcome-steps)
+  > * {
+  animation: welcome-card-arrive 650ms var(--section-ease) both;
+}
+.homepage[data-motion='on']
+  main
+  > section[data-reveal='visible']
+  :is(.plans-grid, .welcome-steps)
+  > :nth-child(2) {
+  animation-delay: 90ms;
+}
+.homepage[data-motion='on'] main > section[data-reveal='visible'] .welcome-steps > :nth-child(3) {
+  animation-delay: 180ms;
+}
+.homepage[data-motion='on'] .hero-copy > * {
+  animation: welcome-card-arrive 700ms var(--section-ease) both;
+}
+.homepage[data-motion='on'] .hero-copy h1 {
+  animation-delay: 60ms;
+}
+.homepage[data-motion='on'] .hero-copy > p {
+  animation-delay: 120ms;
+}
+.homepage[data-motion='on'] .hero-actions {
+  animation-delay: 180ms;
+}
+.homepage[data-motion='on'] .hero-assurance {
+  animation-delay: 240ms;
+}
+.homepage .welcome-section + .welcome-section {
+  position: relative;
+}
+.homepage .welcome-section + .welcome-section::before {
+  content: '';
+  display: block;
+  width: 84px;
+  height: 1px;
+  margin-bottom: 24px;
+  background: linear-gradient(90deg, var(--w-accent), transparent);
+  opacity: 0.45;
+}
+.homepage .welcome-button svg,
+.homepage .welcome-login svg {
+  transition: transform 220ms var(--section-ease);
+}
+.homepage .welcome-button:is(:hover, :focus-visible) svg,
+.homepage .welcome-login:is(:hover, :focus-visible) svg {
+  transform: translateX(3px);
+}
+.homepage[data-motion='on'] .simple-faq details[open] > p {
+  animation: welcome-card-arrive 300ms var(--section-ease) both;
+}
+@keyframes welcome-card-arrive {
+  from {
+    opacity: 0;
+    translate: 0 14px;
+  }
+  to {
+    opacity: 1;
+    translate: 0 0;
+  }
+}
+@media (hover: hover) and (prefers-reduced-motion: no-preference) {
+  .welcome.homepage .plan-card {
+    transition:
+      transform 240ms var(--section-ease),
+      box-shadow 240ms ease,
+      border-color 240ms ease,
+      background-color 220ms ease;
+  }
+  .welcome.homepage[data-motion='on'] .plan-card:hover {
+    transform: translateY(-5px);
+    box-shadow: 0 18px 42px color-mix(in srgb, var(--w-ink) 10%, transparent);
+  }
+}
+@media (max-width: 760px) {
+  .homepage .welcome-header {
+    flex-wrap: wrap;
+    gap: 6px 16px;
+    padding: 12px 20px 8px;
+    min-height: 0;
+  }
+  .homepage .welcome-header nav {
+    display: flex;
+    order: 3;
+    width: 100%;
+    min-width: 0;
+    gap: 22px;
+    overflow-x: auto;
+    font-size: 11px;
+    scrollbar-width: thin;
+    padding: 0 3px 3px;
+  }
+  .homepage .welcome-header nav a {
+    flex-shrink: 0;
+  }
+  .homepage .welcome-login {
+    margin-left: auto;
+  }
+  .welcome.homepage :is(.welcome-section, #commissaires) {
+    scroll-margin-top: 150px;
+  }
+  .homepage[data-motion='on']
+    main
+    > section[data-reveal='pending']:not(:focus-within):not(:target) {
+    transform: translateY(14px);
+  }
+  .homepage .welcome-section + .welcome-section::before {
+    margin-bottom: 18px;
+  }
+}
+.homepage[data-motion='off'] *,
+.homepage[data-motion='off'] *::before,
+.homepage[data-motion='off'] *::after {
+  transition: none !important;
+}
+.homepage[data-motion='off'] .welcome-button:hover,
+.homepage[data-motion='off'] .welcome-button svg,
+.homepage[data-motion='off'] .welcome-login svg {
+  transform: none;
+}
+@media (prefers-reduced-motion: reduce), print {
+  html:has(.homepage) {
+    scroll-behavior: auto !important;
+  }
+  .homepage main > section[data-reveal] {
+    opacity: 1 !important;
+    transform: none !important;
+    transition: none !important;
+  }
+  .homepage .hero-copy > *,
+  .homepage main > section :is(.plans-grid, .welcome-steps) > * {
+    animation: none !important;
+    opacity: 1 !important;
+    translate: none !important;
+  }
+}
+@media print {
+  .homepage .welcome-header {
+    position: static;
+  }
+  .homepage .welcome-reading-progress {
+    display: none;
+  }
+}

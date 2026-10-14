@@ -1,0 +1,11 @@
+[Unit]
+Description=PREUVIX verified snapshot and encrypted off-server backup
+Requires=docker.service
+After=docker.service network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+WorkingDirectory=/opt/preuvix
+ExecStart=/bin/sh /opt/preuvix/deploy/backup-private.sh
+UMask=0077

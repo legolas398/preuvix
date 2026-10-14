@@ -16,6 +16,7 @@ android/app/src/main/assets/capacitor.plugins.json
 !.env.android.example
 .tools/
 data/
+private-runtime/
 coverage/
 test-results/
 *.log

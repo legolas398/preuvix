@@ -174,7 +174,8 @@ export default function MobileApp() {
       <main className="mobile-main">
         {!online && (
           <p className="mobile-notice" role="status">
-            Hors connexion. Les brouillons restent sur cet appareil. Aucun envoi automatique.
+            Aucun réseau détecté. Une connexion USB au serveur peut rester disponible : vous
+            pouvez essayer l’envoi. Les brouillons sont conservés en cas d’échec.
           </p>
         )}
         {(config.error || error) && (
@@ -305,7 +306,6 @@ export default function MobileApp() {
                         className="button primary"
                         disabled={
                           !!busy ||
-                          !online ||
                           (draft.kind === 'file' &&
                             !draft.proof &&
                             (!draft.captureId ||
@@ -451,7 +451,7 @@ export default function MobileApp() {
                     />
                   ) : (
                     <button
-                      disabled={!!busy || !online}
+                      disabled={!!busy}
                       className="button primary"
                       onClick={() => setCapturing(true)}
                     >
@@ -525,7 +525,7 @@ export default function MobileApp() {
                   <MobileCertificationActions
                     key={detail.manifest.id + ':' + detail.manifest.version}
                     dossier={detail}
-                    disabled={!!busy || !online}
+                    disabled={!!busy}
                     run={run}
                     onChange={setDetail}
                   />

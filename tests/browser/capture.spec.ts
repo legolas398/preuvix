@@ -24,11 +24,63 @@ test('mandatory location blocks photo and video when denied or unavailable', asy
     if (request.url().endsWith('/commit')) commits++;
   });
   for (const action of ['Prendre la photo', 'Filmer une vidéo']) {
-    await page.getByRole('button', { name: action, exact: true }).click();
     await expect(page.getByRole('alert')).toContainText('Localisation obligatoire');
+    await expect(page.getByRole('button', { name: action, exact: true })).toBeDisabled();
     expect(commits).toBe(0);
     await page.getByRole('button', { name: 'Recommencer la session' }).click();
   }
+});
+
+test('photo recovers from encoding failure and silent GPS without freezing', async ({
+  page,
+  context,
+}) => {
+  await context.grantPermissions(['camera', 'geolocation']);
+  await page.addInitScript(() => {
+    let silent = true;
+    window.addEventListener('test-gps-ready', () => { silent = false; });
+    Object.defineProperty(navigator.geolocation, 'getCurrentPosition', {
+      value: (success: PositionCallback) => {
+        if (silent) return;
+        success({
+          timestamp: Date.now(),
+          coords: { latitude: 48.8566, longitude: 2.3522, accuracy: 15 },
+        } as GeolocationPosition);
+      },
+    });
+    const original = HTMLCanvasElement.prototype.toBlob;
+    let fail = true;
+    HTMLCanvasElement.prototype.toBlob = function (callback, ...args) {
+      if (fail) {
+        fail = false;
+        throw new Error('Encodage photo interrompu');
+      }
+      return original.call(this, callback, ...args);
+    };
+  });
+  await page.request.post('/api/login', {
+    headers: { Origin: 'http://localhost:3011' },
+    data: { password: 'browser-test-password-only' },
+  });
+  await page.goto('/');
+  await page.getByRole('button', { name: 'Créer une preuve', exact: true }).click();
+  await page.getByRole('button', { name: 'Caméra', exact: true }).click();
+  const photo = page.getByRole('button', { name: 'Prendre la photo', exact: true });
+  await expect(page.getByRole('status')).toContainText('Autorisez la localisation');
+  await expect(photo).toBeDisabled();
+  await expect(page.getByRole('alert')).toContainText('Localisation obligatoire', {
+    timeout: 15000,
+  });
+  await page.evaluate(() => window.dispatchEvent(new Event('test-gps-ready')));
+  await page.getByRole('button', { name: 'Recommencer la session' }).click();
+  await photo.click();
+  await expect(page.getByRole('alert')).toContainText('Encodage photo interrompu');
+  await page.getByRole('button', { name: 'Recommencer la session' }).click();
+  await photo.click();
+  await page.getByText('Déclarations complémentaires (facultatives)', { exact: true }).click();
+  await expect(
+    page.getByText('Empreinte engagée auprès du serveur.', { exact: false }),
+  ).toBeVisible();
 });
 
 test('guided photo and video capture commit hashes, preserve declared context and produce signed dossiers', async ({

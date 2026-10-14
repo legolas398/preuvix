@@ -1,13 +1,16 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { Pause, Play } from 'lucide-react';
+import { useWelcomeMotion } from './useWelcomeMotion';
 
 export default function WelcomeBackdrop({
   theme,
   loading = false,
+  landing = false,
   children,
 }: {
   theme: string;
   loading?: boolean;
+  landing?: boolean;
   children: ReactNode;
 }) {
   const root = useRef<HTMLDivElement>(null);
@@ -39,10 +42,11 @@ export default function WelcomeBackdrop({
     };
   }, []);
   const animated = motion && !reduced;
+  useWelcomeMotion(root, landing, animated, visible);
   return (
     <div
       ref={root}
-      className={`welcome ambient-welcome ${loading ? 'justice-loading' : ''}`}
+      className={`welcome ambient-welcome ${loading ? 'justice-loading' : ''} ${landing ? 'homepage' : ''}`}
       data-theme={theme}
       data-motion={animated ? 'on' : 'off'}
       data-visible={visible}

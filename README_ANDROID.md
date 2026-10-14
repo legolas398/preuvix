@@ -1,5 +1,7 @@
 # Preuvix Android — première version
 
+**Essai USB sur ce PC :** utiliser [le mode d'emploi détaillé](docs/test-android-usb.md), puis double-cliquer sur `Tester-Preuvix-USB.cmd`. Le lanceur utilise un serveur isolé sur le port **3016**, vérifie l'APK, crée le tunnel USB, installe et ouvre l'application. Le [compte rendu USB](docs/validation-android-usb.md) distingue les contrôles exécutés de la validation physique restante.
+
 Application Capacitor avec ressources React embarquées, et **backend Preuvix séparé**. Aucun serveur Node, SQLite, secret TSA ou fichier `.env` serveur n’est embarqué. Le site web conserve son entrée `src/main.tsx`, sa compilation `dist/` et ses cookies habituels. Android utilise `src/mobile/main.tsx` et `dist-android/`.
 
 ## Audit du dépôt

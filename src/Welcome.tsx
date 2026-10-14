@@ -15,6 +15,7 @@ import ProofDemo from './ProofDemo';
 import WelcomeBackdrop from './WelcomeBackdrop';
 import PartnerDirectory from './PartnerDirectory';
 import './welcome.css';
+import './welcome-motion.css';
 
 import { useTheme, ThemePicker, type Theme } from './Theme';
 
@@ -119,19 +120,23 @@ export default function Welcome({ children }: { children: ReactNode }) {
       />
     );
   return (
-    <WelcomeBackdrop theme={appearance.resolvedTheme}>
+    <WelcomeBackdrop theme={appearance.resolvedTheme} landing>
+      <a className="welcome-skip-link" href="#connexion">
+        Accéder à mon espace
+      </a>
       <header className="welcome-header">
         <Wordmark />
         <nav aria-label="Navigation d’accueil">
           <a href="#comprendre">Comment ça marche</a>
-          <a href="/comprendre">Comprendre PREUVIX</a>
           <a href="#offres">Nos offres</a>
           <a href="#commissaires">La carte</a>
           <a href="#faq">Questions fréquentes</a>
+          <a href="#plateformes">Web & Android</a>
         </nav>
         <a className="welcome-login" href="#connexion">
           Mon espace <ArrowUpRight size={16} />
         </a>
+        <span className="welcome-reading-progress" aria-hidden="true" />
       </header>
       <main>
         <button className="loading-preview-link" onClick={() => setLoadingPreview(true)}>
@@ -148,8 +153,8 @@ export default function Welcome({ children }: { children: ReactNode }) {
               un <em>dossier clair.</em>
             </h1>
             <p>
-              Conservez une photo, comparez son empreinte et exportez son dossier depuis votre
-              espace privé.
+              Capturez une photo ou une vidéo avec sa localisation, comparez son empreinte et
+              exportez son dossier depuis votre espace privé.
             </p>
             <div className="hero-actions">
               <a className="welcome-button solid" href="#connexion">
@@ -228,8 +233,8 @@ export default function Welcome({ children }: { children: ReactNode }) {
           <h2>Trois étapes, un dossier à retrouver.</h2>
           <ol className="welcome-steps">
             <li>
-              <strong>1. Choisir une photo</strong>
-              <p>Créez un dossier et conservez votre original.</p>
+              <strong>1. Capturer en direct</strong>
+              <p>Autorisez la caméra et la localisation, puis prenez une photo ou une vidéo.</p>
             </li>
             <li>
               <strong>2. Vérifier sa référence</strong>
@@ -395,7 +400,7 @@ export default function Welcome({ children }: { children: ReactNode }) {
           </details>
           <a href="/comprendre">Comprendre les contrôles et leurs limites</a>
         </section>
-        <section className="welcome-section connection-section" id="connexion">
+        <section className="welcome-section connection-section" id="connexion" tabIndex={-1}>
           <div>
             <span className="welcome-kicker">À VOUS D’ÉCRIRE LA SUITE</span>
             <h2>
@@ -416,6 +421,69 @@ export default function Welcome({ children }: { children: ReactNode }) {
             </div>
           </div>
           {children}
+        </section>
+        <section
+          className="welcome-section compact-section"
+          id="plateformes"
+          aria-labelledby="platforms-title"
+        >
+          <span className="welcome-kicker">SITE WEB ET APPLICATION ANDROID</span>
+          <h2 id="platforms-title">Un même espace privé, deux façons de retrouver vos dossiers.</h2>
+          <div className="plans-grid">
+            <article className="plan-card">
+              <span className="plan-label">DEPUIS VOTRE NAVIGATEUR</span>
+              <h3>Le site web</h3>
+              <p>
+                Capturez, organisez les versions de vos dossiers, comparez un fichier et exportez
+                vos rapports PDF ou ZIP.
+              </p>
+              <p>
+                Retrouvez aussi les liens privés, l’annuaire et les demandes de signature lorsque le
+                service est configuré.
+              </p>
+              <p>
+                Aucune installation nécessaire : les mises à jour du site sont disponibles en
+                rechargeant la page.
+              </p>
+              <a className="welcome-button subtle" href="#connexion">
+                Ouvrir mon espace <ArrowRight size={17} />
+              </a>
+            </article>
+            <article className="plan-card">
+              <span className="plan-label">VERSION DE TEST · ANDROID</span>
+              <h3>L’application Android</h3>
+              <p>
+                Capturez sur le téléphone, retrouvez vos dossiers et partagez vos exports dans une
+                application de votre choix.
+              </p>
+              <p>
+                Les captures engagées en ligne sont conservées en brouillon pour reprendre un envoi.
+                Envoyez-les sous 24 heures, avant de vous déconnecter.
+              </p>
+              <p>
+                Application en cours de validation sur téléphone, pas encore distribuée sur Google
+                Play. Pour les exports de plus de 32 Mo, utilisez le site web.
+              </p>
+              <p>
+                Une mise à jour de l’application doit être installée sur le téléphone. Les
+                brouillons locaux ne sont pas inclus dans les sauvegardes du serveur.
+              </p>
+            </article>
+          </div>
+          <p>
+            Dans les deux versions : capture en direct et localisation obligatoires, sans import de
+            galerie ou de PDF. Une connexion est nécessaire pour commencer une capture. Les PDF sont
+            disponibles à l’export.
+          </p>
+          <p>
+            Ce pilote utilise un espace propriétaire unique. Les horodatages et signatures externes
+            dépendent des services configurés ; une demande en attente n’est pas une validation.
+          </p>
+          <p>
+            Vos dossiers déposés sont accessibles depuis les deux versions lorsqu’elles sont reliées
+            au même espace. Les sauvegardes du serveur concernent ces dossiers reçus, pas les
+            captures encore en attente sur le téléphone.
+          </p>
         </section>
       </main>
       <footer className="welcome-footer">

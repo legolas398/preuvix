@@ -4,11 +4,22 @@ import { readCaptureLocation } from './capture-location';
 import { sha256File } from './file-hash';
 import './capture.css';
 
+const browserPosition = () => readCaptureLocation(true);
+function withDeadline<T>(operation: Promise<T>, message: string, delay = 20000): Promise<T> {
+  return new Promise((resolve, reject) => {
+    const timeout = setTimeout(() => reject(new Error(message)), delay);
+    operation.then(resolve, reject).finally(() => clearTimeout(timeout));
+  });
+}
+const locationError =
+  'Localisation obligatoire. Autorisez la position dans votre navigateur puis recommencez la session.';
+
 async function post<T>(url: string, body: unknown): Promise<T> {
   const response = await fetch(url, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(body),
+    signal: AbortSignal.timeout(20000),
   });
   const result = await response.json();
   if (!response.ok) throw new Error(result.error || 'Session indisponible.');
@@ -18,7 +29,7 @@ export default function CapturePanel({
   onCapture,
   close,
   request = post,
-  readPosition = () => readCaptureLocation(true),
+  readPosition = browserPosition,
   photosOnly = false,
 }: {
   onCapture: (file: File, captureId: string, record: CaptureRecord) => void;
@@ -31,11 +42,13 @@ export default function CapturePanel({
   const stream = useRef<MediaStream | null>(null);
   const recorder = useRef<MediaRecorder | null>(null);
   const alive = useRef(true);
+  const position = useRef<LocationSample | null>(null);
   const timer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const [session, setSession] = useState<CaptureSession | null>(null);
   const [error, setError] = useState('');
   const [ready, setReady] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [progress, setProgress] = useState('');
   const [recording, setRecording] = useState(false);
   const [audio, setAudio] = useState(false);
   const [attempt, setAttempt] = useState(0);
@@ -60,6 +73,8 @@ export default function CapturePanel({
     setReady(false);
     setSession(null);
     setError('');
+    setBusy(false);
+    position.current = null;
     if (!navigator.mediaDevices?.getUserMedia || !globalThis.crypto?.subtle) {
       setError(
         'Capture disponible uniquement en HTTPS ou sur localhost. Sur le réseau local, utilisez une adresse HTTPS approuvée par votre appareil.',
@@ -67,7 +82,13 @@ export default function CapturePanel({
       return;
     }
     (async () => {
-      const media = await navigator.mediaDevices.getUserMedia({
+      setProgress('Autorisez la localisation : recherche de votre position…');
+      const location = await withDeadline(readPosition(), locationError);
+      if (cancelled) return;
+      if (location.status !== 'recorded') throw new Error(locationError);
+      position.current = location;
+      setProgress('Localisation autorisée. Autorisez la caméra pour cadrer votre photo…');
+      const mediaRequest = navigator.mediaDevices.getUserMedia({
         video: {
           facingMode: { ideal: 'environment' },
           width: { ideal: 1280 },
@@ -75,19 +96,41 @@ export default function CapturePanel({
         },
         audio,
       });
+      let cameraTimedOut = false;
+      void mediaRequest.then(
+        (media) => {
+          if (cancelled || cameraTimedOut) media.getTracks().forEach((track) => track.stop());
+        },
+        () => {},
+      );
+      const media = await withDeadline(
+        mediaRequest,
+        'Caméra indisponible ou autorisation en attente. Réessayez.',
+      ).catch((error) => {
+        cameraTimedOut = true;
+        throw error;
+      });
       if (cancelled) {
         media.getTracks().forEach((track) => track.stop());
         return;
       }
       stream.current = media;
       if (video.current) video.current.srcObject = media;
-      const issued = await request<CaptureSession>('/api/captures', {});
-      if (!cancelled) setSession(issued);
-    })().catch(() => {
+      setProgress('Ouverture de la session de capture…');
+      const issued = await withDeadline(
+        request<CaptureSession>('/api/captures', {}),
+        'Le serveur ne répond pas. Recommencez la session.',
+      );
+      if (!cancelled) {
+        setSession(issued);
+        setProgress('');
+      }
+    })().catch((error) => {
       if (!cancelled) {
         stream.current?.getTracks().forEach((track) => track.stop());
+        setProgress('');
         setError(
-          'Caméra, microphone ou session indisponible. Vérifiez vos permissions puis réessayez.',
+          error instanceof Error ? error.message : 'Caméra ou session indisponible. Réessayez.',
         );
       }
     });
@@ -98,12 +141,24 @@ export default function CapturePanel({
       if (recorder.current?.state === 'recording') recorder.current.stop();
       stream.current?.getTracks().forEach((track) => track.stop());
     };
-  }, [audio, attempt, request]);
+  }, [audio, attempt, request, readPosition]);
   useEffect(() => {
     if (!recording) return;
     const interval = setInterval(() => setSeconds((value) => value + 1), 1000);
     return () => clearInterval(interval);
   }, [recording]);
+  async function capturePosition() {
+    setProgress('Vérification de la position…');
+    const previous = position.current;
+    const sample =
+      previous?.status === 'recorded' &&
+      Math.abs(Date.now() - Date.parse(previous.measuredAt)) < 10000
+        ? previous
+        : await withDeadline(readPosition(), locationError);
+    if (sample.status !== 'recorded') throw new Error(locationError);
+    position.current = sample;
+    return sample;
+  }
   async function finish(
     file: File,
     kind: 'photo' | 'video',
@@ -115,65 +170,91 @@ export default function CapturePanel({
     setBusy(true);
     setError('');
     try {
-      const endLocation = kind === 'video' ? await readPosition() : undefined;
+      setProgress(kind === 'video' ? 'Relevé de la position de fin…' : 'Préparation de la photo…');
+      const endLocation =
+        kind === 'video' ? await withDeadline(readPosition(), locationError) : undefined;
       if (endLocation && endLocation.status !== 'recorded')
         throw new Error(
           'Localisation de fin obligatoire. Autorisez la position puis recommencez la vidéo.',
         );
-      const sha256 = await sha256File(file);
+      setProgress('Calcul de l’empreinte de votre capture…');
+      const sha256 = await withDeadline(
+        sha256File(file),
+        'Calcul de l’empreinte interrompu. Réessayez.',
+      );
       if (!alive.current) return;
-      const record = await request<CaptureRecord>(`/api/captures/${session.id}/commit`, {
-        sha256,
-        kind,
-        startedAt,
-        endedAt,
-        nonce: session.nonce,
-        location: { start: startLocation, ...(endLocation ? { end: endLocation } : {}) },
-      });
+      setProgress('Enregistrement de l’empreinte auprès du serveur…');
+      const record = await withDeadline(
+        request<CaptureRecord>(`/api/captures/${session.id}/commit`, {
+          sha256,
+          kind,
+          startedAt,
+          endedAt,
+          nonce: session.nonce,
+          location: { start: startLocation, ...(endLocation ? { end: endLocation } : {}) },
+        }),
+        'Le serveur ne répond pas. Recommencez la session.',
+      );
       if (alive.current) onCapture(file, session.id, record);
     } catch (e) {
       if (alive.current)
         setError((e as Error).message + ' Recommencez une session avant une nouvelle capture.');
     } finally {
-      if (alive.current) setBusy(false);
+      if (alive.current) {
+        setBusy(false);
+        setProgress('');
+      }
     }
   }
   async function photo() {
-    if (!video.current?.videoWidth) return;
+    if (busy || !video.current?.videoWidth) return;
     setBusy(true);
-    const startLocation = await readPosition();
-    if (!alive.current) return;
-    if (startLocation.status !== 'recorded') {
-      setBusy(false);
-      setError(
-        'Localisation obligatoire. Autorisez la position dans votre navigateur puis recommencez la session.',
+    setError('');
+    try {
+      const startLocation = await capturePosition();
+      if (!alive.current) return;
+      if (startLocation.status !== 'recorded') {
+        setBusy(false);
+        setError(
+          'Localisation obligatoire. Autorisez la position dans votre navigateur puis recommencez la session.',
+        );
+        return;
+      }
+      const startedAt = new Date().toISOString();
+      const canvas = document.createElement('canvas');
+      canvas.width = video.current.videoWidth;
+      canvas.height = video.current.videoHeight;
+      const context = canvas.getContext('2d');
+      if (!context) throw new Error('Capture indisponible. Recommencez la session.');
+      context.drawImage(video.current, 0, 0);
+      setProgress('Préparation de la photo…');
+      const blob = await withDeadline(
+        new Promise<Blob>((resolve, reject) =>
+          canvas.toBlob(
+            (value) =>
+              value ? resolve(value) : reject(new Error('La capture a échoué. Réessayez.')),
+            'image/jpeg',
+            0.95,
+          ),
+        ),
+        'La préparation de la photo a pris trop de temps. Réessayez.',
       );
-      return;
+      if (!alive.current) return;
+      await finish(
+        new File([blob], 'capture-photo.jpg', { type: 'image/jpeg' }),
+        'photo',
+        startedAt,
+        new Date().toISOString(),
+        startLocation,
+      );
+    } catch (error) {
+      if (alive.current) setError((error as Error).message);
+    } finally {
+      if (alive.current) {
+        setBusy(false);
+        setProgress('');
+      }
     }
-    const startedAt = new Date().toISOString();
-    const canvas = document.createElement('canvas');
-    canvas.width = video.current.videoWidth;
-    canvas.height = video.current.videoHeight;
-    canvas.getContext('2d')!.drawImage(video.current, 0, 0);
-    canvas.toBlob(
-      (blob) => {
-        if (!alive.current) return;
-        if (blob)
-          void finish(
-            new File([blob], 'capture-photo.jpg', { type: 'image/jpeg' }),
-            'photo',
-            startedAt,
-            new Date().toISOString(),
-            startLocation,
-          );
-        else {
-          setBusy(false);
-          setError('La capture a échoué. Réessayez.');
-        }
-      },
-      'image/jpeg',
-      0.95,
-    );
   }
   async function startVideo() {
     if (!stream.current || typeof MediaRecorder === 'undefined') {
@@ -189,7 +270,7 @@ export default function CapturePanel({
     }
     try {
       setBusy(true);
-      const startLocation = await readPosition();
+      const startLocation = await capturePosition();
       if (!alive.current) return;
       if (startLocation.status !== 'recorded') {
         setBusy(false);
@@ -242,11 +323,13 @@ export default function CapturePanel({
       setSeconds(0);
       setRecording(true);
       setBusy(false);
+      setProgress('');
       timer.current = setTimeout(() => {
         if (active.state === 'recording') active.stop();
       }, 60000);
     } catch {
       setBusy(false);
+      setProgress('');
       setError('Impossible de démarrer la vidéo.');
     }
   }
@@ -254,7 +337,7 @@ export default function CapturePanel({
     <div className="capture-protocol">
       <span className="eyebrow">CAPTURE DOCUMENTÉE · {photosOnly ? 'PHOTO' : 'PHOTO / VIDÉO'}</span>
       <ol>
-        <li>Autorisez la caméra et la localisation, puis cadrez les faits sans filtre.</li>
+        <li>Autorisez d’abord la localisation, puis la caméra. Cadrez les faits sans filtre.</li>
         <li>
           {photosOnly ? 'Prenez une photo en direct.' : 'Photographiez ou filmez (60 s maximum).'}{' '}
           Aucun import de fichier.
@@ -276,7 +359,7 @@ export default function CapturePanel({
           <input
             type="checkbox"
             checked={audio}
-            disabled={recording || busy}
+            disabled={recording || busy || !session}
             onChange={(e) => setAudio(e.target.checked)}
           />{' '}
           Inclure le son (permission microphone)
@@ -302,9 +385,7 @@ export default function CapturePanel({
           nécessaire à l’engagement.
         </p>
       )}
-      {busy && (
-        <p role="status">Relevé de position obligatoire, calcul SHA-256 et engagement serveur…</p>
-      )}
+      {progress && <p role="status">{progress}</p>}
       {error && <p role="alert">{error}</p>}
       <div className="button-row">
         <button className="button secondary" onClick={close}>

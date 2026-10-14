@@ -1,0 +1,8 @@
+{
+    email {$ACME_EMAIL}
+}
+
+{$PREUVIX_DOMAIN} {
+    # No access log: share tokens must not be written to request logs.
+    reverse_proxy preuvix:3000
+}

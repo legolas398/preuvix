@@ -1,0 +1,63 @@
+name: preuvix-private
+services:
+  preuvix:
+    image: preuvix-private:local
+    build:
+      context: ..
+    restart: unless-stopped
+    env_file: ../.env.production
+    environment:
+      NODE_ENV: production
+      HOST: 0.0.0.0
+      PORT: '3000'
+      DATA_DIR: /app/data
+      APP_ORIGIN: https://${PREUVIX_DOMAIN:?Set PREUVIX_DOMAIN}
+      COOKIE_SECURE: 'true'
+      PRIVATE_PROTOTYPE: 'true'
+      PREMIUM_TRANSMISSION_TEST: 'false'
+    volumes:
+      - ../private-runtime/data:/app/data
+      - ../trust:/app/trust:ro
+    expose: ['3000']
+    healthcheck:
+      test:
+        [
+          'CMD',
+          'node',
+          '-e',
+          "fetch('http://127.0.0.1:3000/api/config').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))",
+        ]
+      interval: 30s
+      timeout: 5s
+      start_period: 30s
+      retries: 3
+    mem_limit: 1g
+    pids_limit: 100
+    security_opt: ['no-new-privileges:true']
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    environment:
+      PREUVIX_DOMAIN: ${PREUVIX_DOMAIN:?Set PREUVIX_DOMAIN}
+      ACME_EMAIL: ${ACME_EMAIL:?Set ACME_EMAIL}
+    ports: ['80:80', '443:443']
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+      - caddy-config:/config
+    depends_on:
+      preuvix:
+        condition: service_healthy
+    security_opt: ['no-new-privileges:true']
+  snapshot:
+    image: preuvix-private:local
+    profiles: ['maintenance']
+    entrypoint: ['node', 'scripts/backup.mjs']
+    volumes:
+      - ../private-runtime/data:/source:ro
+      - ../private-runtime/snapshots:/snapshots
+    network_mode: none
+    security_opt: ['no-new-privileges:true']
+volumes:
+  caddy-data:
+  caddy-config:

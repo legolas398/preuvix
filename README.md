@@ -1,6 +1,8 @@
 # PREUVIX
 
-Une première application Android réutilise le frontend et les services existants : [installation, compilation et limites](README_ANDROID.md). Le projet natif est dans `android/`. Ce parcours mobile ajoute les imports photo/PDF et la localisation facultative ; la capture stricte du site reste inchangée. L’accès mobile s’active côté serveur avec `MOBILE_ENABLED=true` et utilise des sessions Bearer distinctes des cookies web.
+Pour essayer Android par câble sur ce PC : double-cliquer sur `Tester-Preuvix-USB.cmd` et suivre le [mode d'emploi USB détaillé](docs/test-android-usb.md). Le serveur de test isolé utilise le port 3016 ; les résultats sont dans le [compte rendu de validation](docs/validation-android-usb.md).
+
+Une première application Android réutilise le frontend et les services existants : [installation, compilation et limites](README_ANDROID.md). Le projet natif est dans `android/`. Les deux parcours exigent une capture photo/vidéo en direct et la localisation ; les imports de galerie et de PDF sont refusés. Android ajoute des brouillons persistants après engagement en ligne et le partage natif des exports. L’accès mobile s’active côté serveur avec `MOBILE_ENABLED=true` et utilise des sessions Bearer distinctes des cookies web.
 
 Prototype privé local : capturer en direct une photo ou une vidéo avec localisation obligatoire, figer son empreinte et son contexte, signer le manifeste, exporter un dossier et comparer les fichiers. Licence MIT. Aucun paiement ni envoi professionnel dans le mode prototype, activé par défaut.
 
@@ -97,6 +99,8 @@ Le mode production refuse de démarrer sans HTTPS, cookie sécurisé et configur
 Avant de considérer le lancement qualifié terminé : obtenir le contrat et les tarifs, configurer le service, réaliser un vrai dépôt, vérifier indépendamment son jeton, documenter le contrôle de qualification et faire valider les formulations. Aucun achat ni appel payant n'a été effectué par ce projet.
 
 ## Déployer
+
+La [préparation du pilote privé HTTPS et des sauvegardes testables](docs/private-https-deployment.md) fournit une configuration Docker/Caddy séparée, un snapshot SQLite avec contrôle de clé, une restauration isolée et une procédure de copie chiffrée hors serveur. Elle ne met pas automatiquement cette installation en ligne.
 
 Héberger sur un serveur dans l'UE avec disque persistant, HTTPS, accès administrateur limité et sauvegardes chiffrées. L'installation n'est pas publiée automatiquement.
 

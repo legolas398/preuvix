@@ -14,7 +14,7 @@ export default defineConfig({
     ...(base.webServer as object),
     command: 'npx tsx server/index.ts',
     url: 'http://localhost:3013/api/config',
-    timeout: 120000,
+    timeout: 240000,
     reuseExistingServer: false,
     env: {
       ...(base.webServer as { env: Record<string, string> }).env,
