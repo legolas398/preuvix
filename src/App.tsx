@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type FormEvent, type ReactNode } from 'react';
+import { lazy, useEffect, useRef, useState, type FormEvent, type ReactNode } from 'react';
 import {
   ArrowDownToLine,
   ArrowLeft,
@@ -33,7 +33,9 @@ import {
 } from 'lucide-react';
 import ProofSummary from './ProofSummary';
 import DraftNotice from './DraftNotice';
-import { readDraft, saveDraft, deleteDraft } from './web-draft';
+import type { WebDraft, DraftCase } from './web-draft';
+import { date, size, Spinner, Notice } from './workspace-ui';
+const CreateProof = lazy(() => import('./CreateProof'));
 import { locationDescription } from '../shared/capture';
 import type { AppConfig, Proof, PublicProof } from '../shared/types';
 import { certificationLabels } from '../shared/certification-policy';
@@ -42,29 +44,29 @@ import { shortId } from '../shared/format';
 import { api } from './api';
 import ProtectionPanel from './ProtectionPanel';
 import RecipientLinks from './RecipientLinks';
-import RecipientPage from './RecipientPage';
+const RecipientPage = lazy(() => import('./RecipientPage'));
 import { HEIF_MESSAGE, MAX_PHOTO_BYTES, photoFormat } from '../shared/photo-format';
 import { sha256File } from './file-hash';
 import LocalFileCheck from './LocalFileCheck';
-import PhotoVerification from './PhotoVerification';
+const PhotoVerification = lazy(() => import('./PhotoVerification'));
 import Welcome, { JusticeLoading, RightsExplorer } from './Welcome';
-import PartnerDirectory from './PartnerDirectory';
-import TransmissionWorkspace, { PremiumCard, TransmissionConsultation } from './Transmission';
+const PartnerDirectory = lazy(() => import('./PartnerDirectory'));
+const TransmissionWorkspace = lazy(() => import('./Transmission'));
+const PremiumCard = lazy(() =>
+  import('./Transmission').then((module) => ({ default: module.PremiumCard })),
+);
+const TransmissionConsultation = lazy(() =>
+  import('./Transmission').then((module) => ({ default: module.TransmissionConsultation })),
+);
 import { CaptureLocation, SignatureControl } from './CaptureEvidence';
-import Cases, { CaseConsultation } from './Cases';
-import Terms from './Terms';
-import CommunitySpaces from './CommunitySpaces';
+const Cases = lazy(() => import('./Cases'));
+const CaseConsultation = lazy(() =>
+  import('./Cases').then((module) => ({ default: module.CaseConsultation })),
+);
+const Terms = lazy(() => import('./Terms'));
+const CommunitySpaces = lazy(() => import('./CommunitySpaces'));
 import CapturePanel from './CapturePanel';
 import { PageAppearance } from './Theme';
-
-const date = (value: string) =>
-  new Intl.DateTimeFormat('fr-FR', {
-    dateStyle: 'medium',
-    timeStyle: 'short',
-    timeZone: 'Europe/Paris',
-  }).format(new Date(value));
-const size = (bytes: number) =>
-  `${(bytes / 1024 / 1024).toLocaleString('fr-FR', { maximumFractionDigits: 1 })} Mo`;
 
 function Brand() {
   return (
@@ -78,17 +80,6 @@ function Brand() {
     </div>
   );
 }
-function Spinner() {
-  return <LoaderCircle size={18} className="spin" aria-label="Chargement" />;
-}
-function Notice({ children, danger = false }: { children: ReactNode; danger?: boolean }) {
-  return (
-    <div className={`notice ${danger ? 'danger' : ''}`} role={danger ? 'alert' : 'status'}>
-      <Info size={18} />
-      <div>{children}</div>
-    </div>
-  );
-}
 function Status({ proof }: { proof: Pick<Proof, 'status'> }) {
   return (
     <span className={`status ${proof.status === 'timestamped' ? 'complete' : 'pending'}`}>
@@ -97,49 +88,13 @@ function Status({ proof }: { proof: Pick<Proof, 'status'> }) {
     </span>
   );
 }
-function Modal({
-  title,
-  children,
-  close,
-  wide = false,
-}: {
-  title: string;
-  children: ReactNode;
-  close: () => void;
-  wide?: boolean;
-}) {
-  const ref = useRef<HTMLDialogElement>(null);
-  useEffect(() => {
-    ref.current?.showModal();
-    return () => ref.current?.close();
-  }, []);
-  return (
-    <dialog
-      className={`modal ${wide ? 'wide' : ''}`}
-      ref={ref}
-      onCancel={(event) => {
-        event.preventDefault();
-        close();
-      }}
-    >
-      <div className="modal-heading">
-        <h2>{title}</h2>
-        <button className="icon-button" onClick={close} aria-label="Fermer">
-          <X size={21} />
-        </button>
-      </div>
-      {children}
-    </dialog>
-  );
-}
-
 export default function App() {
   const [config, setConfig] = useState<AppConfig | null>(null);
   const [error, setError] = useState('');
   const dossierToken = window.location.pathname.match(
     /^\/consultation-dossier\/([a-f0-9]{64})$/,
   )?.[1];
-  if (dossierToken) return <CaseConsultation token={dossierToken} />;
+
   const token = window.location.pathname.match(/^\/verification\/([a-f0-9]{48})$/)?.[1];
   useEffect(() => {
     api<AppConfig>('/api/config')
@@ -147,6 +102,7 @@ export default function App() {
       .catch((e) => setError(e.message));
   }, []);
   const recipientToken = window.location.pathname.match(/^\/dossier\/([a-f0-9]{64})$/)?.[1];
+  if (dossierToken) return <CaseConsultation token={dossierToken} />;
   if (token) return <PublicVerification token={token} />;
   if (recipientToken) return <RecipientPage token={recipientToken} />;
   const consultationToken = window.location.pathname.match(/^\/consultation\/([a-f0-9]{64})$/)?.[1];
@@ -296,7 +252,7 @@ function Workspace({ config, onLogout }: { config: AppConfig; onLogout: () => Pr
     } catch {
       /* Use normal navigation when storage is unavailable. */
     }
-    return 'proofs';
+    return 'cases';
   });
   const storageLimit = config.maxStorageMb;
   const [transmissionProof, setTransmissionProof] = useState<string | undefined>();
@@ -314,6 +270,8 @@ function Workspace({ config, onLogout }: { config: AppConfig; onLogout: () => Pr
   const [query, setQuery] = useState('');
   const [filter, setFilter] = useState('all');
   const [creating, setCreating] = useState(false);
+  const [initialDraft, setInitialDraft] = useState<WebDraft | undefined>();
+  const [initialCase, setInitialCase] = useState<DraftCase | undefined>();
   const caseCapture = useRef<((proof: Proof) => Promise<void>) | null>(null);
   const [selected, setSelected] = useState<Proof | null>(null);
   const refresh = async () => {
@@ -343,7 +301,7 @@ function Workspace({ config, onLogout }: { config: AppConfig; onLogout: () => Pr
           <LockKeyhole size={14} />
         </div>
         <span className="nav-label">ESPACE DE TRAVAIL</span>
-        <nav>
+        <nav aria-label="Navigation principale">
           <button
             className={tab === 'cases' ? 'active' : ''}
             onClick={() => {
@@ -351,16 +309,17 @@ function Workspace({ config, onLogout }: { config: AppConfig; onLogout: () => Pr
               setTab('cases');
             }}
           >
-            <FolderLock size={19} /> Dossiers multi-fichiers
+            <FolderLock size={19} /> Dossiers
           </button>
           <button
-            className={tab === 'proofs' ? 'active' : ''}
             onClick={() => {
-              setSelected(null);
-              setTab('proofs');
+              setInitialDraft(undefined);
+              setInitialCase(undefined);
+              caseCapture.current = null;
+              setCreating(true);
             }}
           >
-            <FolderLock size={19} /> Mes dossiers <span className="nav-count">{proofs.length}</span>
+            <Camera size={19} /> Capturer
           </button>
           <button
             className={tab === 'verify' ? 'active' : ''}
@@ -369,28 +328,52 @@ function Workspace({ config, onLogout }: { config: AppConfig; onLogout: () => Pr
               setTab('verify');
             }}
           >
-            <ScanLine size={19} /> Vérifier un fichier
-          </button>
-          <button
-            className={tab === 'about' ? 'active' : ''}
-            onClick={() => {
-              setSelected(null);
-              setTab('about');
-            }}
-          >
-            <CircleHelp size={19} /> Comprendre PREUVIX
-          </button>
-          <button
-            className={tab === 'billing' ? 'active' : ''}
-            onClick={() => {
-              setSelected(null);
-              setTransmissionProof(undefined);
-              setTab('billing');
-            }}
-          >
-            <Sparkles size={19} /> Préparation Premium
+            <ScanLine size={19} /> Vérifier
           </button>
         </nav>
+        <details className="workspace-secondary">
+          <summary>Preuves et outils</summary>
+          <nav aria-label="Outils secondaires">
+            <button
+              className={tab === 'proofs' ? 'active' : ''}
+              onClick={() => {
+                setSelected(null);
+                setTab('proofs');
+              }}
+            >
+              <FolderLock size={19} /> Toutes les preuves{' '}
+              <span className="nav-count">{proofs.length}</span>
+            </button>
+            <button
+              className={tab === 'verify' ? 'active' : ''}
+              onClick={() => {
+                setSelected(null);
+                setTab('verify');
+              }}
+            >
+              <ScanLine size={19} /> Vérifier un fichier
+            </button>
+            <button
+              className={tab === 'about' ? 'active' : ''}
+              onClick={() => {
+                setSelected(null);
+                setTab('about');
+              }}
+            >
+              <CircleHelp size={19} /> Comprendre PREUVIX
+            </button>
+            <button
+              className={tab === 'billing' ? 'active' : ''}
+              onClick={() => {
+                setSelected(null);
+                setTransmissionProof(undefined);
+                setTab('billing');
+              }}
+            >
+              <Sparkles size={19} /> Préparation Premium
+            </button>
+          </nav>
+        </details>
         <PageAppearance />
         <div className="sidebar-bottom">
           <div className="storage-card">
@@ -420,9 +403,9 @@ function Workspace({ config, onLogout }: { config: AppConfig; onLogout: () => Pr
             Mon espace <ChevronRight size={14} />
             <strong>
               {tab === 'cases'
-                ? 'Dossiers multi-fichiers'
+                ? 'Dossiers'
                 : tab === 'proofs'
-                  ? 'Mes dossiers'
+                  ? 'Toutes les preuves'
                   : tab === 'verify'
                     ? 'Vérification'
                     : tab === 'billing'
@@ -444,7 +427,9 @@ function Workspace({ config, onLogout }: { config: AppConfig; onLogout: () => Pr
         <main className="main-content">
           {!creating && (
             <DraftNotice
-              resume={() => {
+              resume={(draft) => {
+                setInitialDraft(draft);
+                setInitialCase(draft.caseTarget);
                 caseCapture.current = null;
                 setCreating(true);
               }}
@@ -474,7 +459,9 @@ function Workspace({ config, onLogout }: { config: AppConfig; onLogout: () => Pr
             <Cases
               proofs={proofs}
               refreshProofs={refresh}
-              requestCapture={(callback) => {
+              requestCapture={(callback, target) => {
+                setInitialDraft(undefined);
+                setInitialCase(target);
                 caseCapture.current = callback;
                 setCreating(true);
               }}
@@ -485,11 +472,19 @@ function Workspace({ config, onLogout }: { config: AppConfig; onLogout: () => Pr
                 <div>
                   <span className="eyebrow">VOTRE MÉMOIRE NUMÉRIQUE</span>
                   <h1>
-                    Mes dossiers<span className="heading-dot">.</span>
+                    Toutes les preuves<span className="heading-dot">.</span>
                   </h1>
                   <p>Conservez l’original. Documentez son intégrité. Gardez la main.</p>
                 </div>
-                <button className="button primary" onClick={() => setCreating(true)}>
+                <button
+                  className="button primary"
+                  onClick={() => {
+                    setInitialDraft(undefined);
+                    setInitialCase(undefined);
+                    caseCapture.current = null;
+                    setCreating(true);
+                  }}
+                >
                   <Plus size={18} /> Créer une preuve
                 </button>
               </div>
@@ -582,7 +577,15 @@ function Workspace({ config, onLogout }: { config: AppConfig; onLogout: () => Pr
                         : 'Une photo, un titre, et un original conservé dans votre espace privé.'}
                     </p>
                     {!proofs.length && (
-                      <button className="button secondary" onClick={() => setCreating(true)}>
+                      <button
+                        className="button secondary"
+                        onClick={() => {
+                          setInitialDraft(undefined);
+                          setInitialCase(undefined);
+                          caseCapture.current = null;
+                          setCreating(true);
+                        }}
+                      >
                         <Plus size={16} /> Déposer ma première photo
                       </button>
                     )}
@@ -637,11 +640,15 @@ function Workspace({ config, onLogout }: { config: AppConfig; onLogout: () => Pr
       {creating && (
         <CreateProof
           config={config}
+          initialDraft={initialDraft}
+          initialCase={initialCase}
           close={() => {
             setCreating(false);
+            setInitialDraft(undefined);
+            setInitialCase(undefined);
             caseCapture.current = null;
           }}
-          onCreated={async (proof) => {
+          onCreated={async (proof, target) => {
             setCreating(false);
             if (caseCapture.current) {
               const attach = caseCapture.current;
@@ -653,527 +660,37 @@ function Workspace({ config, onLogout }: { config: AppConfig; onLogout: () => Pr
                   `Le fichier est conservé dans vos preuves, mais son ajout au dossier a échoué : ${(e as Error).message}`,
                 );
               }
-            } else setSelected(proof);
+            } else {
+              if (target) {
+                try {
+                  const current = await api<import('../shared/cases').CaseDetail>(
+                    `/api/cases/${target.id}`,
+                  );
+                  if (!current.manifest.files.some((file) => file.proofId === proof.id)) {
+                    await api(`/api/cases/${target.id}/files`, {
+                      method: 'POST',
+                      body: JSON.stringify({
+                        expectedVersion: target.expectedVersion,
+                        proofId: proof.id,
+                        ...(target.replaceFileId ? { replaceFileId: target.replaceFileId } : {}),
+                      }),
+                    });
+                  }
+                } catch (e) {
+                  setError(
+                    `Preuve conservée. Le dossier « ${target.title} » n’a pas pu être mis à jour : ${(e as Error).message} Ajoutez la preuve depuis ce dossier après vérification de sa version.`,
+                  );
+                }
+              }
+              setSelected(proof);
+            }
+            setInitialDraft(undefined);
+            setInitialCase(undefined);
             await refresh();
           }}
         />
       )}
     </div>
-  );
-}
-
-function CreateProof({
-  config,
-  close,
-  onCreated,
-}: {
-  config: AppConfig;
-  close: () => void;
-  onCreated: (proof: Proof) => Promise<void>;
-}) {
-  const [file, setFile] = useState<File | null>(null);
-  const [preview, setPreview] = useState('');
-  const [fileHash, setFileHash] = useState('');
-  const [hashing, setHashing] = useState(false);
-  const [title, setTitle] = useState('');
-  const [description, setDescription] = useState('');
-  const [source, setSource] = useState<'upload' | 'camera'>('upload');
-  const [camera, setCamera] = useState(false);
-  const [captureId, setCaptureId] = useState('');
-  const [author, setAuthor] = useState('');
-  const [context, setContext] = useState('');
-  const [declared, setDeclared] = useState(false);
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState('');
-  const key = useRef<string>(crypto.randomUUID());
-  const [draftReady, setDraftReady] = useState(false);
-  const [draftStatus, setDraftStatus] = useState('Recherche d’un brouillon local…');
-  const [savedProof, setSavedProof] = useState<Proof | null>(null);
-  const draftQueue = useRef<Promise<unknown>>(Promise.resolve());
-  const submitted = useRef(false);
-  useEffect(() => {
-    let active = true;
-    readDraft()
-      .then((draft) => {
-        if (!active) return;
-        if (draft) {
-          setFile(draft.file);
-          setSource('camera');
-          setCaptureId(draft.captureId);
-          setTitle(draft.title);
-          setDescription(draft.description);
-          setAuthor(draft.author);
-          setContext(draft.context);
-          setDeclared(draft.declared);
-          key.current = draft.requestKey;
-          setDraftStatus(
-            'Brouillon retrouvé sur cet appareil. Vérifiez l’aperçu puis réessayez le dépôt.',
-          );
-        } else setDraftStatus('Aucune capture locale en attente.');
-      })
-      .catch(() => {
-        if (active)
-          setDraftStatus(
-            'Stockage local indisponible : gardez cette fenêtre ouverte jusqu’au dépôt.',
-          );
-      })
-      .finally(() => {
-        if (active) setDraftReady(true);
-      });
-    return () => {
-      active = false;
-    };
-  }, []);
-  useEffect(() => {
-    if (!draftReady || !file || submitted.current) return;
-    let active = true;
-    setDraftStatus('Enregistrement du brouillon sur cet appareil…');
-    const draft = {
-      file,
-      captureId,
-      title,
-      description,
-      author,
-      context,
-      declared,
-      requestKey: key.current,
-      savedAt: new Date().toISOString(),
-    };
-    draftQueue.current = draftQueue.current.catch(() => {}).then(() => saveDraft(draft));
-    void draftQueue.current.then(
-      () => {
-        if (active)
-          setDraftStatus(
-            'Brouillon enregistré sur cet appareil uniquement. Le fichier n’est pas encore confirmé sur le serveur.',
-          );
-      },
-      () => {
-        if (active)
-          setDraftStatus(
-            'Échec de sauvegarde locale. Gardez cette fenêtre ouverte et réessayez le dépôt.',
-          );
-      },
-    );
-    return () => {
-      active = false;
-    };
-  }, [draftReady, file, captureId, title, description, author, context, declared]);
-  useEffect(() => {
-    if (!file || savedProof) return;
-    const warn = (event: BeforeUnloadEvent) => {
-      event.preventDefault();
-      event.returnValue = '';
-    };
-    window.addEventListener('beforeunload', warn);
-    return () => window.removeEventListener('beforeunload', warn);
-  }, [file, savedProof]);
-  useEffect(() => {
-    let cancelled = false;
-    setFileHash('');
-    if (!file) {
-      setHashing(false);
-      return;
-    }
-    setHashing(true);
-    (async () => {
-      const format = photoFormat(new Uint8Array(await file.slice(0, 256).arrayBuffer()));
-      if (format === 'heif') throw new Error(HEIF_MESSAGE);
-      const isVideo =
-        new Uint8Array(await file.slice(0, 4).arrayBuffer()).join(',') === '26,69,223,163' ||
-        new TextDecoder().decode(await file.slice(4, 8).arrayBuffer()) === 'ftyp';
-      if (!format && !isVideo)
-        throw new Error('Format non pris en charge. Choisissez une photo JPEG, PNG ou WebP.');
-      return sha256File(file);
-    })()
-      .then((value) => {
-        if (!cancelled) setFileHash(value);
-      })
-      .catch((e) => {
-        if (!cancelled) setError((e as Error).message);
-      })
-      .finally(() => {
-        if (!cancelled) setHashing(false);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [file]);
-  useEffect(() => {
-    if (!file || !fileHash) {
-      setPreview('');
-      return;
-    }
-    const url = URL.createObjectURL(file);
-    setPreview(url);
-    return () => URL.revokeObjectURL(url);
-  }, [file, fileHash]);
-  const choose = (selected: File | undefined, from: 'upload' | 'camera', sessionId = '') => {
-    if (!selected) return;
-    if (from !== 'camera' || !sessionId) {
-      setError('Capture en direct avec localisation obligatoire. Les imports sont désactivés.');
-      return;
-    }
-    setFileHash('');
-    setFile(null);
-    if (selected.size > (selected.type.startsWith('video/') ? 50 * 1024 * 1024 : MAX_PHOTO_BYTES)) {
-      setError('La photo dépasse la limite de 10 Mo.');
-      return;
-    }
-    key.current = crypto.randomUUID();
-    setError('');
-    setFile(selected);
-    setSource(from);
-    setCaptureId(sessionId);
-    setCamera(false);
-    if (!title) setTitle(selected.name.replace(/\.[^.]+$/, '').slice(0, 120));
-  };
-  const submit = async (event: FormEvent) => {
-    event.preventDefault();
-    if (!file || !fileHash || hashing) return;
-    setBusy(true);
-    setError('');
-    const body = new FormData();
-    body.append('file', file);
-    body.append('title', title);
-    body.append('description', description);
-    body.append('source', source);
-    body.append('requestKey', key.current);
-    body.append('clientSha256', fileHash);
-    if (captureId) body.append('captureId', captureId);
-    if (declared)
-      body.append(
-        'declaration',
-        JSON.stringify({
-          author,
-          context,
-          statement:
-            'Je décris les faits de bonne foi, signale les modifications connues et conserve les éléments utiles au débat contradictoire.',
-        }),
-      );
-    try {
-      const proof = await api<Proof>('/api/proofs', {
-        method: 'POST',
-        body,
-        signal: AbortSignal.timeout(90000),
-      });
-      submitted.current = true;
-      await draftQueue.current.catch(() => {});
-      try {
-        await deleteDraft();
-        setDraftStatus('Le brouillon local a été supprimé après confirmation du serveur.');
-      } catch {
-        setDraftStatus('Dépôt réussi, mais le brouillon local n’a pas pu être supprimé.');
-      }
-      setSavedProof(proof);
-    } catch (e) {
-      setError((e as Error).message);
-    } finally {
-      setBusy(false);
-    }
-  };
-  return (
-    <Modal
-      title="Créer une preuve"
-      close={() => {
-        if (!busy) {
-          if (savedProof) {
-            setBusy(true);
-            void onCreated(savedProof)
-              .catch((e) => setError(e.message))
-              .finally(() => setBusy(false));
-          } else close();
-        }
-      }}
-    >
-      <p className="modal-subtitle">
-        Capturez en direct une photo ou une vidéo avec sa localisation, documentez les faits et
-        obtenez votre attestation technique PDF.
-      </p>
-      {savedProof ? (
-        <section className="capture-storage" role="status">
-          <h2>Preuve enregistrée sur le serveur</h2>
-          <p>
-            {savedProof.manifest.title} · reçue le {date(savedProof.manifest.receivedAt)}.
-          </p>
-          <p>{draftStatus}</p>
-          <p>
-            {savedProof.receipt
-              ? 'Horodatage externe obtenu.'
-              : 'Horodatage externe non obtenu ; le fichier est bien conservé.'}
-          </p>
-          <button
-            className="button primary"
-            disabled={busy}
-            onClick={async () => {
-              setBusy(true);
-              try {
-                await onCreated(savedProof);
-              } catch (e) {
-                setError((e as Error).message);
-              } finally {
-                setBusy(false);
-              }
-            }}
-          >
-            Ouvrir la preuve enregistrée
-          </button>
-          {error && <p role="alert">{error}</p>}
-        </section>
-      ) : (
-        <>
-          <ol className="capture-steps" aria-label="Étapes de création">
-            <li aria-current={!file ? 'step' : undefined}>Localisation et caméra</li>
-            <li aria-current={file && !busy ? 'step' : undefined}>Aperçu et description</li>
-            <li aria-current={busy ? 'step' : undefined}>Enregistrement serveur</li>
-          </ol>
-          <section className="capture-storage" aria-label="État de sauvegarde">
-            <p>{draftStatus}</p>
-            <p>
-              Un brouillon reste dans ce navigateur, accessible aux utilisateurs de ce profil.
-              Déposez-le dans les 24 heures avec la même session de connexion. Une session expirée
-              peut nécessiter une nouvelle capture. Effacer les données du navigateur supprime le
-              brouillon.
-            </p>
-            {file && (
-              <button
-                type="button"
-                className="button secondary"
-                disabled={busy}
-                onClick={async () => {
-                  const url = URL.createObjectURL(file);
-                  const link = document.createElement('a');
-                  link.href = url;
-                  link.download = file.name;
-                  link.click();
-                  setTimeout(() => URL.revokeObjectURL(url), 1000);
-                }}
-              >
-                Télécharger ma capture locale
-              </button>
-            )}
-            {file && (
-              <button
-                type="button"
-                className="button secondary"
-                disabled={busy}
-                onClick={async () => {
-                  setBusy(true);
-                  try {
-                    await draftQueue.current.catch(() => {});
-                    await deleteDraft();
-                    setFile(null);
-                    setCaptureId('');
-                    setDraftStatus('Brouillon local supprimé.');
-                  } catch {
-                    setError('Impossible de supprimer le brouillon.');
-                  } finally {
-                    setBusy(false);
-                  }
-                }}
-              >
-                Supprimer le brouillon local
-              </button>
-            )}
-          </section>
-          {camera ? (
-            <CapturePanel
-              close={() => setCamera(false)}
-              onCapture={(f, id) => choose(f, 'camera', id)}
-            />
-          ) : (
-            <form onSubmit={submit}>
-              <fieldset disabled={busy || !draftReady}>
-                <div
-                  className="upload-zone"
-                  onDragOver={(e) => e.preventDefault()}
-                  onDrop={(e) => {
-                    e.preventDefault();
-                    if (!busy)
-                      setError(
-                        'Les imports sont désactivés. Utilisez la caméra avec la localisation.',
-                      );
-                  }}
-                >
-                  {preview ? (
-                    <>
-                      {file?.type.startsWith('video/') ? (
-                        <video className="upload-preview" src={preview} controls playsInline />
-                      ) : (
-                        <img
-                          className="upload-preview"
-                          src={preview}
-                          alt="Aperçu du fichier sélectionné"
-                        />
-                      )}
-                      <span>
-                        {file?.name} · {size(file?.size || 0)}
-                      </span>
-                    </>
-                  ) : (
-                    <>
-                      <div className="round-icon">
-                        <Upload size={25} />
-                      </div>
-                      <h3>Capturez votre photo ou vidéo en direct</h3>
-                      <p>Caméra et localisation obligatoires. Vidéo : 60 secondes maximum.</p>
-                    </>
-                  )}
-                  <div className="button-row">
-                    <button
-                      type="button"
-                      className="button secondary"
-                      onClick={() => setCamera(true)}
-                    >
-                      <Camera size={16} /> Caméra
-                    </button>
-                  </div>
-                </div>
-                <p className="phone-format-help">
-                  Autorisez la caméra et la localisation dans votre navigateur pour créer une
-                  preuve.
-                </p>
-                {hashing && (
-                  <div className="hash-progress" role="status">
-                    <Spinner /> Calcul de l’empreinte sur votre appareil…
-                  </div>
-                )}
-                {fileHash && (
-                  <div className="hash-box" aria-label="Empreinte avant dépôt">
-                    <span>
-                      <Fingerprint size={16} /> SHA-256 CALCULÉ AVANT L’ENVOI
-                    </span>
-                    <code>{fileHash}</code>
-                    <p>
-                      Le serveur recalculera cette empreinte. Le dépôt sera refusé si les résultats
-                      diffèrent. Le fichier n’a pas encore été envoyé.
-                    </p>
-                  </div>
-                )}
-                <label htmlFor="proof-title">
-                  Titre du dossier <span>*</span>
-                </label>
-                <input
-                  id="proof-title"
-                  required
-                  maxLength={120}
-                  value={title}
-                  onChange={(e) => {
-                    key.current = crypto.randomUUID();
-                    setTitle(e.target.value);
-                  }}
-                  placeholder="Ex. État du mur avant travaux"
-                />
-                <label htmlFor="proof-description">
-                  Contexte <small>facultatif</small>
-                </label>
-                <textarea
-                  id="proof-description"
-                  rows={3}
-                  maxLength={1500}
-                  value={description}
-                  onChange={(e) => {
-                    key.current = crypto.randomUUID();
-                    setDescription(e.target.value);
-                  }}
-                  placeholder="Décrivez ce que vous souhaitez documenter…"
-                />
-                <div className="privacy-hint">
-                  <LockKeyhole size={15} />
-                  <span>
-                    Privé par défaut. La localisation obligatoire est conservée avec la capture et
-                    incluse dans ses exports. L’original peut aussi contenir ses propres
-                    métadonnées.
-                  </span>
-                </div>
-                <details className="capture-declaration">
-                  <summary>Déclarations complémentaires (facultatives)</summary>
-                  {captureId && (
-                    <p>
-                      Empreinte engagée auprès du serveur. Déposez ce média dans les 24 heures.
-                      L’identité de l’auteur et la réalité de la scène ne sont pas vérifiées.
-                    </p>
-                  )}
-                  <label htmlFor="declared-author">Auteur déclaré (facultatif)</label>
-                  <input
-                    id="declared-author"
-                    maxLength={120}
-                    value={author}
-                    onChange={(e) => {
-                      setAuthor(e.target.value);
-                      key.current = crypto.randomUUID();
-                    }}
-                  />
-                  <label htmlFor="declared-context">
-                    Lieu, circonstances et modifications connues (facultatif)
-                  </label>
-                  <textarea
-                    id="declared-context"
-                    maxLength={1200}
-                    rows={3}
-                    value={context}
-                    onChange={(e) => {
-                      setContext(e.target.value);
-                      key.current = crypto.randomUUID();
-                    }}
-                    placeholder="Distinguez ce que vous avez observé de vos interprétations. Signalez tout montage, filtre ou usage d’IA connu."
-                  />
-                  <label className="capture-check">
-                    <input
-                      type="checkbox"
-                      checked={declared}
-                      onChange={(e) => {
-                        setDeclared(e.target.checked);
-                        key.current = crypto.randomUUID();
-                      }}
-                    />{' '}
-                    Je décris les faits de bonne foi, signale les modifications connues et conserve
-                    les éléments utiles au débat contradictoire.
-                  </label>
-                  <p>
-                    Ces déclarations sont ajoutées au manifeste signé uniquement si vous cochez la
-                    case et complétez les deux champs. Aucun score « sans IA » ni garantie de
-                    recevabilité n’est délivré.
-                  </p>
-                </details>
-                {!config.timestampConfigured && (
-                  <Notice>
-                    Le fichier sera conservé <strong>en attente d’horodatage</strong>. Le
-                    prestataire indépendant n’est pas encore configuré.
-                  </Notice>
-                )}
-                {error && <Notice danger>{error}</Notice>}
-                <div className="modal-actions">
-                  <button type="button" className="button secondary" onClick={close}>
-                    Annuler
-                  </button>
-                  <button
-                    className="button primary"
-                    disabled={
-                      !file ||
-                      !fileHash ||
-                      hashing ||
-                      !title.trim() ||
-                      busy ||
-                      (declared && (author.trim().length < 2 || context.trim().length < 5))
-                    }
-                  >
-                    {busy ? (
-                      <>
-                        <Spinner /> Dépôt et vérification…
-                      </>
-                    ) : (
-                      <>
-                        <Plus size={17} /> {error ? 'Réessayer le dépôt' : 'Conserver ma preuve'}
-                      </>
-                    )}
-                  </button>
-                </div>
-              </fieldset>
-            </form>
-          )}
-        </>
-      )}
-    </Modal>
   );
 }
 

@@ -2,7 +2,7 @@
 
 ## Créer et retrouver un dossier
 
-Dans l’espace privé, ouvrez **Dossiers multi-fichiers**, puis **Créer un dossier**.
+Dans l’espace privé, l’entrée **Dossiers** est affichée par défaut. Choisissez **Créer un dossier**. La navigation principale propose aussi **Capturer** et **Vérifier**. Le menu **Preuves et outils** donne accès à **Toutes les preuves**, aux explications et à Premium.
 Utilisez le titre pour identifier le client ou l’intervention, et décrivez le contexte.
 La recherche porte sur le titre et la description. Les filtres de dates portent sur la dernière mise à jour (UTC).
 
@@ -12,7 +12,7 @@ La checklist rappelle les pièces présentes, le contexte et la relecture des ex
 
 ## Capturer et conserver
 
-1. Cliquez sur **Créer une preuve** ou **Capturer une photo ou vidéo** depuis un dossier.
+1. Cliquez sur **Capturer** ou **Capturer une photo ou vidéo** depuis un dossier.
 2. Ouvrez la caméra : la localisation est demandée avant l’accès à la caméra.
 3. Capturez, puis vérifiez l’aperçu et renseignez le titre et le contexte.
 4. Cliquez sur **Conserver ma preuve**. Attendez la confirmation **Preuve enregistrée sur le serveur**.
@@ -22,13 +22,15 @@ Un engagement d’empreinte n’est pas un dépôt du fichier. Le résumé disti
 
 ### Brouillon et échec d’envoi
 
-Après l’engagement de la capture, le navigateur conserve automatiquement un brouillon (fichier, description et identifiant de dépôt) dans IndexedDB. Un seul brouillon en attente est conservé par profil de navigateur et par adresse du site. Évitez de préparer plusieurs captures dans plusieurs onglets en même temps.
+Après l’engagement de la capture, le navigateur conserve automatiquement un brouillon distinct (fichier, description, identifiant de dépôt, secret de reprise et dossier associé) dans IndexedDB. Plusieurs captures peuvent être préparées dans des onglets différents. Si deux onglets modifient le même brouillon, le second ne peut pas écraser silencieusement la version enregistrée : fermez-le et rouvrez le brouillon depuis la liste. La capture de cet onglet reste téléchargeable en secours. L’ancien brouillon unique est migré automatiquement ; fermez les anciens onglets si la migration est bloquée.
 
 Après une interruption réseau, utilisez **Réessayer le dépôt**. Après rechargement ou fermeture, utilisez **Reprendre le brouillon** dans l’espace privé. L’identifiant de dépôt est conservé pour reconnaître une répétition du même envoi. Vérifiez la liste des preuves si une réponse a été perdue.
 
-Le brouillon n’est pas une sauvegarde serveur : les utilisateurs du même profil peuvent y accéder et l’effacement des données du navigateur le supprime. Déposez dans les 24 heures, avec la session de connexion ayant ouvert la capture. Une déconnexion ou expiration de session peut imposer une nouvelle capture. Un brouillon repris depuis l’accueil n’est pas automatiquement rattaché à son ancien dossier : rattachez la preuve depuis le dossier après dépôt.
+Le brouillon n’est pas une sauvegarde serveur : les utilisateurs du même profil peuvent y accéder et l’effacement des données du navigateur le supprime. Déposez dans les 24 heures. En cas d’expiration de connexion, le formulaire propose de vous reconnecter sans fermer le brouillon. Le serveur vérifie l’authentification, le secret de reprise et l’empreinte, sans changer les dates ni prolonger le délai initial. Un ancien brouillon migré ne possède pas ce nouveau secret : il reste utilisable dans sa session d’origine, mais peut nécessiter une nouvelle capture après reconnexion.
 
-**Télécharger ma capture locale** permet de garder les octets sur l’appareil ; cela ne crée pas de preuve serveur. **Supprimer le brouillon local** efface la copie du navigateur. Après confirmation serveur, le brouillon est supprimé automatiquement ; un message signale un échec de cette suppression.
+Le dossier associé est conservé. Après confirmation serveur, **Ouvrir la preuve enregistrée** rattache la preuve à ce dossier. Si sa version a changé entre-temps, un message demande de vérifier le dossier et de rattacher la preuve manuellement ; aucun remplacement d’une version plus récente n’est effectué silencieusement. Si la capture avait déjà été déposée avant une réponse perdue, la reprise retrouve cette preuve au lieu de créer un doublon ; les métadonnées du dépôt initial restent inchangées.
+
+**Télécharger ma capture locale** permet de garder les octets sur l’appareil ; cela ne crée pas de preuve serveur. **Supprimer le brouillon local** efface la copie du navigateur. Le brouillon reste disponible jusqu’à l’ouverture de la preuve confirmée, pour pouvoir terminer son rattachement si l’onglet se ferme entre-temps. Il est alors supprimé automatiquement, sauf erreur de stockage ou modification concurrente ; dans ces cas il reste visible dans la liste.
 
 Si l’engagement de l’empreinte échoue après l’encodage, un téléchargement de secours reste disponible dans la fenêtre de capture. Ce fichier n’est pas encore un brouillon récupérable après fermeture. Si le stockage local est indisponible, le site l’indique : gardez la fenêtre ouverte jusqu’au dépôt.
 

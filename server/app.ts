@@ -200,6 +200,15 @@ export function createApp(
       }
     },
   );
+  app.get('/api/health', (_req, res) => {
+    res.set('Cache-Control', 'no-store');
+    try {
+      store.db.prepare('SELECT 1').get();
+      res.json({ service: 'preuvix', status: 'ready' });
+    } catch {
+      res.status(503).json({ service: 'preuvix', status: 'unavailable' });
+    }
+  });
   app.get('/api/config', async (req, res) => {
     const isAuthenticated = authenticated(req);
     const storageLimit = isAuthenticated
@@ -266,6 +275,34 @@ export function createApp(
       res.status(201).json(certificates.issue(hash(req.cookies.preuvix_session)));
     } catch (error) {
       res.status(429).json({ error: (error as Error).message });
+    }
+  });
+  app.post('/api/captures/:id/resume', requireAuth, (req, res) => {
+    const input = z
+      .object({
+        sha256: z.string().regex(/^[a-f0-9]{64}$/),
+        nonce: z
+          .string()
+          .regex(/^[a-f0-9]{32}$/)
+          .optional(),
+      })
+      .strict()
+      .safeParse(req.body);
+    if (!input.success || !z.uuid().safeParse(req.params.id).success)
+      return void res.status(400).json({ error: 'Données de reprise invalides.' });
+    try {
+      certificates.resume(
+        String(req.params.id),
+        hash(req.cookies.preuvix_session),
+        input.data.sha256,
+        input.data.nonce,
+      );
+      const existing = store.db
+        .prepare("SELECT id FROM proofs WHERE json_extract(manifest, '$.capture.id')=?")
+        .get(String(req.params.id)) as { id: string } | undefined;
+      res.json({ resumed: true, proofId: existing?.id ?? null });
+    } catch (e) {
+      res.status(409).json({ error: (e as Error).message });
     }
   });
   app.post('/api/captures/:id/commit', requireAuth, (req, res) => {

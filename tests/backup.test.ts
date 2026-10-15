@@ -11,6 +11,7 @@ import { readConfig } from '../server/config';
 import { Store } from '../server/store';
 import { hash } from '../server/integrity';
 import { commitFixture } from './live-fixture';
+import { restoreDrill } from '../scripts/restore-drill.mjs';
 
 test('backup restores a signed original, authenticated API and PDF; rejects corruption and overwrites', async () => {
   await mkdir('.tools/backup-tests', { recursive: true });
@@ -47,6 +48,10 @@ test('backup restores a signed original, authenticated API and PDF; rejects corr
     await writeFile(path.join(source, 'partners.json'), '[]');
     await createBackup(source, snapshot);
     await verifyBackup(snapshot);
+    const drill = await restoreDrill(snapshot, path.join(root, 'isolated-drill'));
+    assert.equal(drill.proofs, 1);
+    assert.equal(drill.signaturesVerified, 1);
+    assert.equal(drill.sessionsRevoked, true);
     // A later source write must not change the saved point in time.
     await writeFile(path.join(source, 'partners.json'), '[{"changed":true}]');
     const result = await restoreBackup(snapshot, restored);

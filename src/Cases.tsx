@@ -12,6 +12,7 @@ import {
   type ServiceKind,
 } from '../shared/cases';
 import type { Proof } from '../shared/types';
+import type { DraftCase } from './web-draft';
 import './cases.css';
 import './proof-workspace.css';
 
@@ -164,7 +165,7 @@ export default function Cases({
 }: {
   proofs: Proof[];
   refreshProofs: () => Promise<void>;
-  requestCapture: (callback: (proof: Proof) => Promise<void>) => void;
+  requestCapture: (callback: (proof: Proof) => Promise<void>, target: DraftCase) => void;
 }) {
   const [query, setQuery] = useState('');
   const [since, setSince] = useState('');
@@ -527,11 +528,19 @@ export default function Cases({
                   <button
                     className="button secondary"
                     onClick={() =>
-                      requestCapture(async (proof) => {
-                        await attach(proof.id);
-                        setReplaceFileId('');
-                        setNotice('Capture ajoutée au dossier.');
-                      })
+                      requestCapture(
+                        async (proof) => {
+                          await attach(proof.id);
+                          setReplaceFileId('');
+                          setNotice('Capture ajoutée au dossier.');
+                        },
+                        {
+                          id: dossier.manifest.id,
+                          title: dossier.manifest.title,
+                          expectedVersion: dossier.manifest.version,
+                          ...(replaceFileId ? { replaceFileId } : {}),
+                        },
+                      )
                     }
                   >
                     Capturer une photo ou vidéo

@@ -25,7 +25,7 @@ services:
           'CMD',
           'node',
           '-e',
-          "fetch('http://127.0.0.1:3000/api/config').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))",
+          "fetch('http://127.0.0.1:3000/api/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))",
         ]
       interval: 30s
       timeout: 5s
@@ -57,6 +57,20 @@ services:
       - ../private-runtime/data:/source:ro
       - ../private-runtime/snapshots:/snapshots
     network_mode: none
+    security_opt: ['no-new-privileges:true']
+  monitor:
+    image: preuvix-private:local
+    profiles: ['maintenance']
+    user: '0:0'
+    entrypoint: ['node', 'scripts/monitor-private.mjs']
+    env_file: ../.env.monitor
+    environment:
+      MONITOR_ORIGIN: https://${PREUVIX_DOMAIN:?Set PREUVIX_DOMAIN}
+    volumes:
+      - ../private-runtime/status:/status
+      - ../private-runtime/data:/data:ro
+    read_only: true
+    cap_drop: ['ALL']
     security_opt: ['no-new-privileges:true']
 volumes:
   caddy-data:

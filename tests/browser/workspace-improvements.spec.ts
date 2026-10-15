@@ -18,7 +18,7 @@ test('local draft survives upload failure and reload, then confirms storage and 
     data: { password: 'browser-test-password-only' },
   });
   await page.goto('/');
-  await page.getByRole('button', { name: 'Créer une preuve', exact: true }).click();
+  await page.getByRole('button', { name: 'Capturer', exact: true }).click();
   await page.getByRole('button', { name: 'Caméra', exact: true }).click();
   await page.getByRole('button', { name: 'Prendre la photo', exact: true }).click();
   const title = `Intervention test ${Date.now()}`;
@@ -52,7 +52,7 @@ test('local draft survives upload failure and reload, then confirms storage and 
   await expect(page.getByLabel('Les cinq contrôles de la preuve')).toContainText(
     'Original et manifeste conformes',
   );
-  await expect(page.getByLabel('Brouillon local en attente')).toHaveCount(0);
+  await expect(page.getByLabel('Brouillons locaux en attente')).toHaveCount(0);
   await page.getByText('Lien de vérification des empreintes', { exact: true }).click();
   await page.getByLabel('Expiration du lien').selectOption('7');
   await page.getByRole('button', { name: 'Activer un lien de vérification' }).click();

@@ -12,6 +12,8 @@
     "backup:verify": "node scripts/backup.mjs verify",
     "backup:restore": "node scripts/backup.mjs restore",
     "test:backup": "tsx --test tests/backup.test.ts",
+    "test:operations": "node --test tests/monitor-private.test.mjs",
+    "restore:drill": "node scripts/restore-drill.mjs",
     "android:build:dev": "tsc --noEmit && vite build --config vite.android.config.ts --mode android-development",
     "android:build": "tsc --noEmit && vite build --config vite.android.config.ts --mode android",
     "android:sync": "cap sync android",

@@ -16,7 +16,7 @@ test('mandatory location blocks photo and video when denied or unavailable', asy
     data: { password: 'browser-test-password-only' },
   });
   await page.goto('/');
-  await page.getByRole('button', { name: 'Créer une preuve', exact: true }).click();
+  await page.getByRole('button', { name: 'Capturer', exact: true }).click();
   await expect(page.getByLabel('Choisir une photo')).toHaveCount(0);
   await page.getByRole('button', { name: 'Caméra', exact: true }).click();
   let commits = 0;
@@ -65,7 +65,7 @@ test('photo recovers from encoding failure and silent GPS without freezing', asy
     data: { password: 'browser-test-password-only' },
   });
   await page.goto('/');
-  await page.getByRole('button', { name: 'Créer une preuve', exact: true }).click();
+  await page.getByRole('button', { name: 'Capturer', exact: true }).click();
   await page.getByRole('button', { name: 'Caméra', exact: true }).click();
   const photo = page.getByRole('button', { name: 'Prendre la photo', exact: true });
   await expect(page.getByRole('status')).toContainText('Autorisez la localisation');
@@ -96,7 +96,8 @@ test('guided photo and video capture commit hashes, preserve declared context an
   await page.getByLabel('Mot de passe de l’espace').fill('browser-test-password-only');
   await page.getByRole('button', { name: 'Ouvrir mon espace' }).click();
   for (const kind of ['photo', 'video']) {
-    await page.getByRole('button', { name: 'Créer une preuve', exact: true }).click();
+    await context.setGeolocation({ latitude: 48.8566, longitude: 2.3522, accuracy: 15 });
+    await page.getByRole('button', { name: 'Capturer', exact: true }).click();
     await page.getByRole('button', { name: 'Caméra', exact: true }).click();
     await expect(page.getByRole('button', { name: 'Prendre la photo', exact: true })).toBeEnabled({
       timeout: 30000,

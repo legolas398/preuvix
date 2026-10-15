@@ -126,6 +126,20 @@ export default function CapturePanel({
         return;
       }
       stream.current = media;
+      media.getVideoTracks().forEach((track) =>
+        track.addEventListener(
+          'ended',
+          () => {
+            if (cancelled) return;
+            setReady(false);
+            setError(
+              'La caméra a été interrompue. Recommencez la session après avoir déverrouillé le téléphone.',
+            );
+            if (recorder.current?.state === 'recording') recorder.current.stop();
+          },
+          { once: true },
+        ),
+      );
       if (video.current) video.current.srcObject = media;
       setProgress('Ouverture de la session de capture…');
       const issued = await withDeadline(

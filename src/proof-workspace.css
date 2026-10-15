@@ -54,6 +54,50 @@
   gap: 10px 25px;
   padding: 15px 25px;
 }
+.draft-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 14px;
+}
+.draft-list li {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  border-bottom: 1px solid var(--border, #ddd);
+  padding-bottom: 14px;
+}
+.draft-list small {
+  display: block;
+  margin-top: 6px;
+}
+.workspace-secondary {
+  margin: 16px 0;
+}
+.workspace-secondary summary {
+  cursor: pointer;
+  padding: 10px;
+}
+.app-shell .sidebar nav[aria-label='Navigation principale'] button {
+  font-size: 13px;
+  max-width: none;
+  min-height: 44px;
+}
+.workspace-secondary nav { flex-wrap: wrap; }
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
 .capture-steps [aria-current='step'] {
   font-weight: 700;
   text-decoration: underline;

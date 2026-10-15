@@ -5,6 +5,7 @@ import {
   sign,
   randomBytes,
   randomUUID,
+  timingSafeEqual,
   verify,
 } from 'node:crypto';
 import { readFileSync, writeFileSync } from 'node:fs';
@@ -186,6 +187,26 @@ export function certification(store: Store, directory: string) {
       throw new Error('Le délai de dépôt de 24 heures est dépassé.');
     return record;
   }
+  function resume(id: string, owner: string, sha256: string, nonce?: string) {
+    const row = store.db
+      .prepare('SELECT owner,session,record FROM capture_sessions WHERE id=?')
+      .get(id) as { owner: string; session: string; record: string | null } | undefined;
+    if (!row?.record) throw new Error('Capture indisponible pour la reprise.');
+    const session: CaptureSession = JSON.parse(row.session);
+    if (
+      row.owner !== owner &&
+      (!nonce ||
+        !/^[a-f0-9]{32}$/.test(nonce) ||
+        !timingSafeEqual(Buffer.from(nonce), Buffer.from(session.nonce)))
+    )
+      throw new Error(
+        'Secret de reprise absent ou incorrect. Reprenez depuis le navigateur de capture.',
+      );
+    // Reuse the original validation and deadline; never rewrite the committed evidence.
+    const record = resolve(id, row.owner, sha256);
+    store.db.prepare('UPDATE capture_sessions SET owner=? WHERE id=?').run(owner, id);
+    return record;
+  }
   function attest(manifest: object): Attestation {
     const bytes = Buffer.from(JSON.stringify(manifest));
     return {
@@ -208,5 +229,5 @@ export function certification(store: Store, directory: string) {
       publicKey,
     };
   }
-  return { issue, commit, resolve, attest, signReview, publicKey, keyId, retiredKeys };
+  return { issue, commit, resolve, resume, attest, signReview, publicKey, keyId, retiredKeys };
 }

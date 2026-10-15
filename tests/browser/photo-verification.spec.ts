@@ -13,7 +13,7 @@ test('private photo verification shows four blocks and exports a signed private 
     data: { password: 'browser-test-password-only' },
   });
   await page.goto('/', { waitUntil: 'domcontentloaded' });
-  await page.getByRole('button', { name: 'Vérifier un fichier' }).click();
+  await page.getByRole('navigation', { name: 'Navigation principale' }).getByRole('button', { name: 'Vérifier', exact: true }).click();
   await expect(page.getByRole('heading', { name: 'Vérifier une photo' })).toBeVisible();
   const bytes = await sharp({
     create: { width: 64, height: 48, channels: 3, background: '#88aacc' },
@@ -29,7 +29,7 @@ test('private photo verification shows four blocks and exports a signed private 
     .getByLabel('Photo originale')
     .setInputFiles({ name: 'test.jpg', mimeType: 'image/jpeg', buffer: bytes });
   expect(uploads).toBe(0);
-  await page.getByRole('button', { name: 'Vérifier', exact: true }).click();
+  await page.getByRole('main').getByRole('button', { name: 'Vérifier', exact: true }).click();
   for (const name of [
     'Intégrité',
     'Provenance',

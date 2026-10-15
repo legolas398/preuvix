@@ -1,0 +1,11 @@
+[Unit]
+Description=PREUVIX HTTPS, disk and backup monitoring
+Requires=docker.service
+After=docker.service network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+WorkingDirectory=/opt/preuvix
+ExecStart=/usr/bin/docker compose --env-file .env.production -f deploy/compose.private.yaml run --rm --no-deps monitor
+UMask=0077

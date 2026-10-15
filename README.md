@@ -10,6 +10,8 @@ La [structure des écrans et le parcours Premium](docs/parcours-premium.md) déc
 
 ## Capture documentée et attestation
 
+Les [tests sur téléphone réel](docs/validation-telephone-reel.md) se lancent avec `Tester-Site-USB.cmd`. La [mise en service et la surveillance](docs/mise-en-service-et-surveillance.md) précisent les prérequis du serveur, les alertes et l’exercice de restauration depuis le stockage externe.
+
 Le [mode d’emploi des dossiers, brouillons et liens de vérification](docs/parcours-preuve-et-partage.md) détaille la reprise après un échec d’envoi, les cinq contrôles de preuve et le partage expirant avec localisation facultative.
 
 Le [protocole de capture et de certification technique](docs/capture-certification.md) décrit les sessions engagées, la vidéo, la signature Ed25519, le PDF imprimable, les garanties et les limites anti-IA. Les nouveaux dossiers sont signés par la clé propre à l’installation ; les anciens dossiers restent lisibles sans signature rétroactive. L’identité du déposant et la réalité de la scène ne sont pas certifiées. L’horodatage indépendant reste en attente tant qu’un prestataire n’est pas configuré.

@@ -457,9 +457,7 @@ export async function makeReport(proof: Proof, origin: string, original: Buffer)
     doc.step(
       'passed',
       'Session de capture ouverte par le serveur',
-      capture.challenge
-        ? `Défi en direct émis : code « ${capture.challenge.code} » et geste « ${capture.challenge.gesture} », à montrer dans l’image.`
-        : 'Session aléatoire liée à la connexion du déposant.',
+      'Session aléatoire liée à la connexion du déposant.',
       paris(capture.issuedAt),
     );
     doc.step(
@@ -508,23 +506,6 @@ export async function makeReport(proof: Proof, origin: string, original: Buffer)
       : 'Aucun prestataire n’a encore horodaté ce manifeste. Aucune date qualifiée n’est inventée.',
     proof.receipt ? paris(proof.receipt.time) : undefined,
   );
-  if (capture?.challenge) {
-    const reviews = proof.reviews ?? [];
-    const last = reviews.at(-1)?.review;
-    doc.step(
-      !last ? 'pending' : last.outcome === 'confirmed' ? 'passed' : 'review',
-      'Vérification visuelle du défi en direct',
-      last
-        ? reviews
-            .map(
-              ({ review }) =>
-                `${review.outcome === 'confirmed' ? 'Défi visible et conforme' : review.outcome === 'absent' ? 'Défi absent ou non conforme' : 'Défi illisible ou incertain'} — ${review.reviewer} (nom déclaré)${review.note ? ` : ${review.note}` : ''}. Vérification signée séparément.`,
-            )
-            .join('\n')
-        : 'Aucune vérification enregistrée : la présence du code et du geste dans l’image reste à confirmer.',
-      last ? paris(last.reviewedAt) : undefined,
-    );
-  }
   if (proof.watermarked) {
     const issued = proof.events.find((event) => event.kind === 'protected_copy_issued');
     doc.step(
@@ -538,21 +519,11 @@ export async function makeReport(proof: Proof, origin: string, original: Buffer)
   // ── 3. Checks ──
   if (certification) {
     doc.heading('03', 'Contrôles et indices');
-    // The visual review is recorded after signing: show its latest outcome alongside.
-    const lastReview = proof.reviews?.at(-1)?.review;
-    for (const check of certification.checks)
-      if (check.id === 'challenge' && check.result === 'review' && lastReview)
-        doc.step(
-          lastReview.outcome === 'confirmed' ? 'passed' : 'review',
-          checkTitles.challenge,
-          `${check.detail} Vérification signée du ${paris(lastReview.reviewedAt)} : ${lastReview.outcome === 'confirmed' ? 'défi visible et conforme' : lastReview.outcome === 'absent' ? 'défi absent ou non conforme' : 'défi illisible ou incertain'}.`,
-        );
-      else doc.step(check.result, checkTitles[check.id] ?? check.id, check.detail);
-    if (manifest.provenance.signals.length)
-      doc.text(`Indices relevés : ${manifest.provenance.signals.join(' ; ')}`, {
-        size: 8.5,
-        color: C.review,
-      });
+    // These checks remain in the signed manifest, but are omitted from the report.
+    for (const check of certification.checks) {
+      if (['challenge', 'ai_metadata', 'physical_origin'].includes(check.id)) continue;
+      doc.step(check.result, checkTitles[check.id] ?? check.id, check.detail);
+    }
   }
 
   // ── 4. Declarations ──
@@ -752,9 +723,6 @@ const checkTitles: Record<string, string> = {
   decode: 'Décodage du média',
   hash: 'Empreinte des octets originaux',
   capture: 'Session de capture',
-  challenge: 'Défi en direct',
   location: 'Localisation de la prise de vue',
   c2pa: 'Signature d’appareil C2PA',
-  ai_metadata: 'Indices IA dans les métadonnées',
-  physical_origin: 'Origine physique',
 };

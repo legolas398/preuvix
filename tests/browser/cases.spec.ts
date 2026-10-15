@@ -18,7 +18,7 @@ test('multi-file dossier preserves versions, verifies originals, exports and rev
   await page.goto('/');
   await page.getByLabel('Mot de passe de l’espace').fill('browser-test-password-only');
   await page.getByRole('button', { name: 'Ouvrir mon espace' }).click();
-  await page.getByRole('button', { name: 'Dossiers multi-fichiers', exact: true }).click();
+  await page.getByRole('button', { name: 'Dossiers', exact: true }).click();
   await page.getByRole('button', { name: 'Créer un dossier', exact: true }).click();
   const title = `Dossier navigateur ${Date.now()}`;
   await page.getByLabel('Titre du dossier multi-fichiers').fill(title);
