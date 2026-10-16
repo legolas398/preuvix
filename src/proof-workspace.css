@@ -7,7 +7,7 @@
 }
 .proof-status-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 220px), 1fr));
   gap: 14px;
 }
 .proof-status-grid > div {
@@ -86,7 +86,9 @@
   max-width: none;
   min-height: 44px;
 }
-.workspace-secondary nav { flex-wrap: wrap; }
+.workspace-secondary nav {
+  flex-wrap: wrap;
+}
 .sr-only {
   position: absolute;
   width: 1px;
@@ -102,4 +104,77 @@
   font-weight: 700;
   text-decoration: underline;
   text-underline-offset: 5px;
+}
+.dossier-page {
+  overflow-wrap: anywhere;
+  min-width: 0;
+}
+.dossier-page .dossier-navigation {
+  position: sticky;
+  top: 8px;
+  z-index: 5;
+  flex-wrap: nowrap;
+  overflow-x: auto;
+  gap: 6px;
+  padding: 8px;
+  border: 1px solid var(--border, #ddd);
+  border-radius: 14px;
+  background: var(--surface, #fffdfa);
+  box-shadow: 0 4px 18px #00000008;
+}
+.dossier-navigation a {
+  flex-shrink: 0;
+  padding: 12px 14px;
+  border-radius: 9px;
+  text-decoration: none;
+  transition: background-color 150ms ease;
+}
+.dossier-navigation a:hover,
+.dossier-navigation a:focus-visible {
+  background: var(--bg-subtle, #ad4b1810);
+}
+.dossier-page [id] {
+  scroll-margin-top: 100px;
+}
+.dossier-page .detail-image img,
+.dossier-page .detail-image video {
+  max-width: 100%;
+  object-fit: contain;
+}
+.dossier-page .detail-facts,
+.dossier-page .detail-layout > * {
+  min-width: 0;
+}
+.download-status {
+  min-height: 1.5em;
+  font-size: 0.9rem;
+}
+@media (prefers-reduced-motion: no-preference) {
+  html:has(.dossier-page),
+  html:has(.mobile-app) {
+    scroll-behavior: smooth;
+  }
+  .dossier-page {
+    animation: proof-appear 180ms ease-out;
+  }
+}
+@keyframes proof-appear {
+  from {
+    opacity: 0;
+    transform: translateY(5px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+@media (max-width: 600px) {
+  .proof-summary {
+    padding: 14px;
+  }
+  .dossier-page .detail-downloads > * {
+    width: 100%;
+    min-height: 48px;
+    justify-content: center;
+  }
 }

@@ -10,6 +10,8 @@ import sharp from 'sharp';
 import { createRequire } from 'node:module';
 import { execFileSync } from 'node:child_process';
 import { unzipSync } from 'fflate';
+import { PDFPage } from 'pdf-lib';
+import { makeReport } from '../server/report';
 import { Store } from '../server/store';
 import { readConfig } from '../server/config';
 import { createApp } from '../server/app';
@@ -208,6 +210,43 @@ test('capture commitment is authenticated, immutable, session-bound and included
     assert.ok(files['manifest.sig']);
     assert.ok(files['signer-public.pem']);
     assert.ok(files['rapport.pdf']);
+    // Downloads must remain private and non-cacheable after layout changes.
+    for (const resource of ['report', 'export', 'original'])
+      await request(app).get(`/api/proofs/${proof.id}/${resource}`).expect(401);
+    assert.match(exported.headers['cache-control'], /no-store/);
+    const draw = PDFPage.prototype.drawText;
+    const positions: { text: string; x: number; y: number; width: number }[] = [];
+    PDFPage.prototype.drawText = function (text, options) {
+      if (options?.font)
+        positions.push({
+          text,
+          x: options.x ?? 0,
+          y: options.y ?? 0,
+          width: options.font.widthOfTextAtSize(text, options.size ?? 24),
+        });
+      return draw.call(this, text, options);
+    };
+    try {
+      const lengthy = structuredClone(proof);
+      lengthy.manifest.file.name = 'W'.repeat(4000);
+      lengthy.manifest.description = 'Contexte détaillé conservé. '.repeat(160);
+      await makeReport(lengthy, origin, bytes);
+    } finally {
+      PDFPage.prototype.drawText = draw;
+    }
+    const filenameLines = positions.filter((line) => /^W+$/.test(line.text));
+    assert.ok(filenameLines.length > 50, 'Long identifiers must wrap across pages');
+    for (const line of filenameLines) {
+      assert.ok(line.y >= 70, 'Filename must stay above the footer');
+      assert.ok(line.x + line.width <= 552, 'Filename must stay within page margins');
+    }
+    assert.ok(
+      !positions.some((line) =>
+        ['Défi en direct', 'Indices IA dans les métadonnées', 'Origine physique'].includes(
+          line.text,
+        ),
+      ),
+    );
     for (const [name, data] of Object.entries(files))
       writeFileSync(path.join(directory, name), data);
     const result = execFileSync(process.execPath, ['scripts/verify-export.mjs', directory], {

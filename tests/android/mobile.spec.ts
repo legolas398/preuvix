@@ -99,7 +99,9 @@ test('mobile login, dossier, denied location, lost upload response, retry and PD
     if (mode === 'unavailable')
       await page.getByRole('button', { name: 'Recommencer la session' }).click();
     await expect(page.getByRole('alert')).toContainText('Localisation obligatoire');
-    await expect(page.getByRole('button', { name: 'Prendre la photo', exact: true })).toBeDisabled();
+    await expect(
+      page.getByRole('button', { name: 'Prendre la photo', exact: true }),
+    ).toBeDisabled();
     expect(commits).toBe(0);
   }
   await page.evaluate(() => sessionStorage.setItem('location-mode', 'granted'));
@@ -198,6 +200,13 @@ test('mobile login, dossier, denied location, lost upload response, retry and PD
   await expect(page.getByRole('button', { name: 'Actualiser la demande · ancrage' })).toBeVisible();
   await expect(anchor).toBeDisabled();
   const download = page.waitForEvent('download');
+  await page
+    .getByRole('navigation', { name: 'Sections de la preuve' })
+    .getByRole('link', { name: 'Exports', exact: true })
+    .click();
+  await expect(
+    page.getByRole('button', { name: 'Enregistrer / partager le PDF', exact: true }),
+  ).toBeInViewport();
   await page.getByRole('button', { name: 'Enregistrer / partager le PDF', exact: true }).click();
   expect((await download).suggestedFilename()).toBe('dossier-preuvix.pdf');
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);

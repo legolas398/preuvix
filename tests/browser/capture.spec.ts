@@ -161,7 +161,7 @@ test('guided photo and video capture commit hashes, preserve declared context an
     await expect(page.getByLabel('Attestation technique')).toContainText('Manifeste signé');
     if (kind === 'video') await expect(page.locator('.detail-image video')).toBeVisible();
     const download = page.waitForEvent('download');
-    await page.getByRole('link', { name: 'Rapport PDF' }).click();
+    await page.getByRole('button', { name: 'Rapport PDF' }).click();
     expect((await download).suggestedFilename()).toMatch(/\.pdf$/);
     await page.request.delete(`/api/proofs/${proof.id}`, {
       headers: { Origin: 'http://localhost:3011' },

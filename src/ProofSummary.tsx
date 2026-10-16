@@ -16,17 +16,22 @@ export default function ProofSummary({ proof }: { proof: Proof }) {
   const [attempt, setAttempt] = useState(0);
   useEffect(() => {
     let active = true;
+    const controller = new AbortController();
+    const timeout = window.setTimeout(() => controller.abort(), 30000);
     setCheck(null);
     setError('');
-    api<Integrity>(`/api/proofs/${proof.id}/integrity`)
+    api<Integrity>(`/api/proofs/${proof.id}/integrity`, { signal: controller.signal })
       .then((value) => {
         if (active) setCheck(value);
       })
       .catch((e) => {
         if (active) setError(e.message);
-      });
+      })
+      .finally(() => window.clearTimeout(timeout));
     return () => {
       active = false;
+      window.clearTimeout(timeout);
+      controller.abort();
     };
   }, [proof.id, attempt]);
   const m = proof.manifest;

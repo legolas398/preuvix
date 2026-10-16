@@ -408,6 +408,12 @@ export default function MobileApp() {
             ) : detail ? (
               <section>
                 <h1>{detail.manifest.title}</h1>
+                <nav className="mobile-proof-nav" aria-label="Sections de la preuve">
+                  <a href="#mobile-capture">Capturer</a>
+                  <a href="#mobile-pieces">Pièces</a>
+                  <a href="#mobile-certification">Certification</a>
+                  <a href="#mobile-exports">Exports</a>
+                </nav>
                 <p>{detail.manifest.description}</p>
                 <label>
                   Version du dossier
@@ -432,7 +438,7 @@ export default function MobileApp() {
                   </select>
                 </label>
                 <section className="mobile-card">
-                  <h2>Ajouter une capture en direct</h2>
+                  <h2 id="mobile-capture">Ajouter une capture en direct</h2>
                   <p>
                     Photo ou vidéo de 60 secondes maximum. Caméra et localisation obligatoires, au
                     début et à la fin de la vidéo. Aucun import. Une connexion au serveur est
@@ -460,7 +466,7 @@ export default function MobileApp() {
                   )}
                 </section>
                 <section aria-label="Pièces du dossier">
-                  <h2>Pièces et traçabilité</h2>
+                  <h2 id="mobile-pieces">Pièces et traçabilité</h2>
                   {!detail.manifest.files.length && (
                     <p>Ce dossier ne contient pas encore de pièce.</p>
                   )}
@@ -520,7 +526,7 @@ export default function MobileApp() {
                   ))}
                 </section>
                 <section className="mobile-card">
-                  <h2>Justificatifs disponibles</h2>
+                  <h2 id="mobile-certification">Justificatifs disponibles</h2>
                   <ServiceEvidence dossier={detail} />
                   <MobileCertificationActions
                     key={detail.manifest.id + ':' + detail.manifest.version}
@@ -550,7 +556,7 @@ export default function MobileApp() {
                     </pre>
                   </details>
                 </section>
-                <div className="mobile-actions">
+                <div className="mobile-actions" id="mobile-exports">
                   <button
                     disabled={!!busy}
                     className="button primary"

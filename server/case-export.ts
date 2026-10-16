@@ -19,6 +19,22 @@ export async function caseReport(detail: CaseDetail) {
   const font = await doc.embedFont(fontBytes);
   let page = doc.addPage([595, 842]),
     y = 790;
+  const supported = new Set(font.getCharacterSet());
+  function heading(text: string, size = 15) {
+    if (y < 125) {
+      page = doc.addPage([595, 842]);
+      y = 790;
+    }
+    y -= 10;
+    line(text, size);
+    page.drawLine({
+      start: { x: 45, y: y + 3 },
+      end: { x: 550, y: y + 3 },
+      thickness: 0.5,
+      color: rgb(0.8, 0.75, 0.7),
+    });
+    y -= 7;
+  }
   function line(text: string, size = 10) {
     // Every Unicode character is rendered by the embedded font, never interpolated as PDF code.
     let current = '';
@@ -31,7 +47,8 @@ export async function caseReport(detail: CaseDetail) {
       y -= size + 7;
       current = '';
     };
-    for (const character of text.replace(/[\x00-\x08\x0b\x0c\x0e-\x1f]/g, '')) {
+    for (const raw of text.replace(/[\x00-\x08\x0b\x0c\x0e-\x1f]/g, '')) {
+      const character = raw === '\n' || supported.has(raw.codePointAt(0)!) ? raw : '?';
       if (character === '\n') {
         flush();
         continue;
@@ -42,7 +59,7 @@ export async function caseReport(detail: CaseDetail) {
     flush();
   }
   const m = detail.manifest;
-  line('PREUVIX · Dossier récapitulatif', 20);
+  heading('PREUVIX · Dossier récapitulatif', 20);
   line(`${m.title} · version ${m.version}`, 15);
   line(`Référence : ${m.id}`);
   line(`Version enregistrée par le serveur (UTC) : ${m.createdAt}`);
@@ -53,8 +70,7 @@ export async function caseReport(detail: CaseDetail) {
   line(m.description || 'Aucune description.');
   line(`Adresse saisie (déclarative, sans capture GPS) : ${m.declaredAddress || 'Non renseignée'}`);
   for (const file of m.files) {
-    y -= 10;
-    line(`${file.title} · fichier v${file.fileVersion}`, 13);
+    heading(`${file.title} · fichier v${file.fileVersion}`, 13);
     line(`${file.file.name} · ${file.file.mime} · ${file.file.size} octets`);
     line(`Réception serveur UTC : ${file.receivedAt}`);
     line(`Fichier enregistré · empreinte SHA-256 calculée : ${file.file.sha256}`);
@@ -80,8 +96,7 @@ export async function caseReport(detail: CaseDetail) {
       line(`Fin de vidéo : ${locationDescription(file.capture.location?.end)}`);
     if (file.supersedes) line(`Version précédente conservée : ${file.supersedes}`);
   }
-  y -= 10;
-  line('Justificatifs de cette version', 15);
+  heading('Justificatifs de cette version');
   for (const kind of ['timestamp', 'anchor', 'signature'] as const) {
     const operation = detail.operations.find((item) => item.kind === kind);
     line(
@@ -127,6 +142,18 @@ export async function caseReport(detail: CaseDetail) {
   line(`Clé technique PREUVIX : ${detail.attestation.keyId}`);
   doc.setTitle(`PREUVIX — ${m.title} — version ${m.version}`);
   doc.setAuthor('PREUVIX');
+  const pages = doc.getPages();
+  pages.forEach((current, index) => {
+    current.drawLine({
+      start: { x: 45, y: 40 },
+      end: { x: 550, y: 40 },
+      thickness: 0.5,
+      color: rgb(0.8, 0.75, 0.7),
+    });
+    current.drawText(`PREUVIX · ${m.id} · v${m.version}`, { x: 45, y: 26, size: 7, font });
+    const number = `${index + 1} / ${pages.length}`;
+    current.drawText(number, { x: 550 - font.widthOfTextAtSize(number, 8), y: 26, size: 8, font });
+  });
   return Buffer.from(await doc.save());
 }
 

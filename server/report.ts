@@ -199,33 +199,36 @@ class Layout {
   }
   field(label: string, value: string, width = CONTENT) {
     const labelWidth = 128;
+    const labelLines = this.lines(label, this.fonts.bold, 8, labelWidth - 12);
     const valueLines = this.lines(value, this.fonts.body, 9, width - labelWidth);
-    const height = valueLines.length * 13 + 5;
-    this.ensure(height);
-    this.page.drawText(this.clean(label), {
-      x: M,
-      y: this.y - 9,
-      size: 8,
-      font: this.fonts.bold,
-      color: C.muted,
-    });
-    valueLines.forEach((line, index) =>
-      this.page.drawText(line, {
-        x: M + labelWidth,
-        y: this.y - 9 - index * 13,
-        size: 9,
-        font: this.fonts.body,
-        color: C.ink,
-      }),
-    );
-    this.y -= height;
+    const count = Math.max(labelLines.length, valueLines.length);
+    this.ensure(Math.min(count * 13 + 5, H - 130));
+    for (let index = 0; index < count; index++) {
+      this.ensure(13);
+      if (labelLines[index])
+        this.page.drawText(labelLines[index], {
+          x: M,
+          y: this.y - 9,
+          size: 8,
+          font: this.fonts.bold,
+          color: C.muted,
+        });
+      if (valueLines[index])
+        this.page.drawText(valueLines[index], {
+          x: M + labelWidth,
+          y: this.y - 9,
+          size: 9,
+          font: this.fonts.body,
+          color: C.ink,
+        });
+      this.y -= 13;
+    }
+    this.y -= 5;
   }
   // Timeline / check row with a coloured status marker.
   step(result: Result | 'pending', title: string, detail: string, when?: string) {
     const color = result === 'pending' ? C.unverified : resultColor(result);
-    const detailLines = this.lines(detail, this.fonts.body, 8.5, CONTENT - 30);
-    const height = 16 + detailLines.length * 12 + (when ? 12 : 0) + 6;
-    this.ensure(height);
+    this.ensure(60);
     const top = this.y;
     this.page.drawCircle({
       x: M + 6,
@@ -234,13 +237,6 @@ class Layout {
       color: result === 'passed' ? color : undefined,
       borderColor: color,
       borderWidth: 1.4,
-    });
-    this.page.drawText(this.clean(title), {
-      x: M + 22,
-      y: top - 10,
-      size: 10,
-      font: this.fonts.bold,
-      color: C.ink,
     });
     const tag = result === 'pending' ? 'En attente' : resultLabel[result];
     const tagWidth = this.fonts.bold.widthOfTextAtSize(tag, 7.5);
@@ -251,22 +247,17 @@ class Layout {
       font: this.fonts.bold,
       color,
     });
-    let y = top - 24;
+    this.text(title, {
+      x: M + 22,
+      width: CONTENT - 40 - tagWidth,
+      size: 10,
+      font: this.fonts.bold,
+      gap: 4,
+    });
     if (when) {
-      this.page.drawText(this.clean(when), {
-        x: M + 22,
-        y,
-        size: 8,
-        font: this.fonts.body,
-        color: C.accent,
-      });
-      y -= 12;
+      this.text(when, { x: M + 22, width: CONTENT - 30, size: 8, color: C.accent, gap: 2 });
     }
-    for (const line of detailLines) {
-      this.page.drawText(line, { x: M + 22, y, size: 8.5, font: this.fonts.body, color: C.muted });
-      y -= 12;
-    }
-    this.y = y - 6;
+    this.text(detail, { x: M + 22, width: CONTENT - 30, size: 8.5, color: C.muted, gap: 6 });
   }
 }
 

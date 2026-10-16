@@ -109,7 +109,7 @@ test('standard dossier remains usable without Premium; direct premium call denie
   await expect(page.getByRole('heading', { name: 'Export', exact: true })).toBeVisible();
   await expect(page.getByRole('button', { name: 'Découvrir l’option Premium' })).toBeVisible();
   const download = page.waitForEvent('download');
-  await page.getByRole('link', { name: 'Dossier complet (.zip)' }).click();
+  await page.getByRole('button', { name: 'Dossier complet (.zip)' }).click();
   expect((await download).suggestedFilename()).toMatch(/zip$/);
   await page.getByRole('button', { name: 'Découvrir l’option Premium' }).click();
   await expect(

@@ -89,7 +89,7 @@ test('owner creates a private record, shares verification, compares locally, exp
   expect(uploaded).toBe(false);
   await publicPage.screenshot({ path: 'test-results/verification-desktop.png', fullPage: true });
   const download = page.waitForEvent('download');
-  await page.getByRole('link', { name: 'Dossier complet (.zip)' }).click();
+  await page.getByRole('button', { name: 'Dossier complet (.zip)' }).click();
   expect((await download).suggestedFilename()).toMatch(/\.zip$/);
   await page.getByRole('button', { name: '← Mes dossiers', exact: true }).click();
   await page.setViewportSize({ width: 390, height: 844 });

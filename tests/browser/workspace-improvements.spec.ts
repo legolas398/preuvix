@@ -9,6 +9,7 @@ test.use({
 test('local draft survives upload failure and reload, then confirms storage and shares a verifiable report', async ({
   page,
   browser,
+  context,
 }) => {
   test.setTimeout(150000);
   const errors: string[] = [];
@@ -19,6 +20,7 @@ test('local draft survives upload failure and reload, then confirms storage and 
   });
   await page.goto('/');
   await page.getByRole('button', { name: 'Capturer', exact: true }).click();
+  await context.setGeolocation({ latitude: 48.8566, longitude: 2.3522, accuracy: 15 });
   await page.getByRole('button', { name: 'Caméra', exact: true }).click();
   await page.getByRole('button', { name: 'Prendre la photo', exact: true }).click();
   const title = `Intervention test ${Date.now()}`;
@@ -74,8 +76,19 @@ test('local draft survives upload failure and reload, then confirms storage and 
     .getByLabel('Fichier à comparer localement')
     .setInputFiles({ name: 'changed.jpg', mimeType: 'image/jpeg', buffer: Buffer.from('changed') });
   await expect(visitor.getByText('Le fichier est différent', { exact: true })).toBeVisible();
+  await page
+    .getByRole('navigation', { name: 'Sections du dossier' })
+    .getByRole('link', { name: 'Export', exact: true })
+    .click();
+  await expect(page.getByRole('button', { name: 'Rapport PDF', exact: true })).toBeInViewport();
   const download = page.waitForEvent('download');
-  await page.getByRole('link', { name: 'Rapport PDF', exact: true }).click();
+  await page.route(`**/api/proofs/${proof.id}/report`, async (route) => {
+    await new Promise((resolve) => setTimeout(resolve, 800));
+    await route.continue();
+  });
+  await page.getByRole('button', { name: 'Rapport PDF', exact: true }).click();
+  await expect(page.getByRole('button', { name: 'Rapport PDF', exact: true })).toBeDisabled();
+  await expect(page.getByRole('status')).toContainText('Préparation du PDF');
   expect((await download).suggestedFilename()).toMatch(/\.pdf$/);
   await page.setViewportSize({ width: 390, height: 844 });
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(

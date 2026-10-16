@@ -32,6 +32,7 @@ import {
   Info,
 } from 'lucide-react';
 import ProofSummary from './ProofSummary';
+import ProofDownloads from './ProofDownloads';
 import DraftNotice from './DraftNotice';
 import type { WebDraft, DraftCase } from './web-draft';
 import { date, size, Spinner, Notice } from './workspace-ui';
@@ -745,7 +746,7 @@ function ProofDetail({
         <span>{shortId(proof.id)}</span>
         <Status proof={proof} />
       </div>
-      <ProofSummary proof={proof} />
+      <ProofSummary key={proof.id} proof={proof} />
       <h2 id="documents">Documents</h2>
       <div className="detail-layout">
         <div className="detail-image">
@@ -759,7 +760,7 @@ function ProofDetail({
               preload="metadata"
             />
           ) : (
-            <img src={`/api/proofs/${proof.id}/original`} alt={proof.manifest.title} />
+            <img src={`/api/proofs/${proof.id}/original`} alt={proof.manifest.title} decoding="async" />
           )}
           <span>
             <LockKeyhole size={12} /> ORIGINAL PRIVÉ
@@ -1099,14 +1100,7 @@ function ProofDetail({
         Le dossier complet contient l’original et ses métadonnées. Pour limiter les informations
         accessibles, utilisez la préparation Premium ci-dessous.
       </p>
-      <div className="detail-downloads">
-        <a className="button primary" href={`/api/proofs/${proof.id}/export`}>
-          <ArrowDownToLine size={17} /> Dossier complet (.zip)
-        </a>
-        <a className="button secondary" href={`/api/proofs/${proof.id}/report`}>
-          <FileCheck2 size={17} /> Rapport PDF
-        </a>
-      </div>
+      <ProofDownloads key={proof.id} proofId={proof.id} />
       <p>
         <a href="/annuaire">Consulter l’annuaire dans une page séparée</a>
       </p>
