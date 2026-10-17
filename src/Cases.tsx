@@ -1,3 +1,5 @@
+import { publicOrigin } from './transport';
+import { downloadFile } from './download';
 import ServiceEvidence from './ServiceEvidence';
 import { useEffect, useRef, useState, type FormEvent } from 'react';
 import { api } from './api';
@@ -26,19 +28,8 @@ type ShareLink = {
 const empty: CaseInput = { title: '', description: '', declaredAddress: '' };
 const utc = (value: string) =>
   new Date(value).toISOString().replace('T', ' ').replace('.000Z', ' UTC').replace('Z', ' UTC');
-async function download(url: string, name: string) {
-  const response = await fetch(url);
-  if (!response.ok) {
-    const body = await response.json().catch(() => ({}));
-    throw new Error(body.error || 'Téléchargement impossible. Réessayez.');
-  }
-  const objectUrl = URL.createObjectURL(await response.blob()),
-    link = document.createElement('a');
-  link.href = objectUrl;
-  link.download = name;
-  link.click();
-  setTimeout(() => URL.revokeObjectURL(objectUrl), 1000);
-}
+const download = downloadFile;
+
 function Fields({ value, onChange }: { value: CaseInput; onChange: (value: CaseInput) => void }) {
   return (
     <>
@@ -882,7 +873,7 @@ export default function Cases({
                         }),
                       },
                     );
-                    setShareUrl(location.origin + result.url);
+                    setShareUrl(publicOrigin() + result.url);
                     setShareConfirmed(false);
                     setLinks(await api(`/api/cases/${dossier.manifest.id}/links`));
                   })

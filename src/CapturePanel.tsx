@@ -1,3 +1,4 @@
+import { appFetch } from './transport';
 import { useEffect, useRef, useState } from 'react';
 import type { CaptureRecord, CaptureSession, LocationSample } from '../shared/capture';
 import { readCaptureLocation } from './capture-location';
@@ -15,7 +16,7 @@ const locationError =
   'Localisation obligatoire. Autorisez la position dans votre navigateur puis recommencez la session.';
 
 async function post<T>(url: string, body: unknown): Promise<T> {
-  const response = await fetch(url, {
+  const response = await appFetch(url, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(body),

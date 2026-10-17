@@ -12,7 +12,7 @@ export default defineConfig({
   },
   webServer: {
     ...(base.webServer as object),
-    command: 'npx tsx server/index.ts',
+    command: 'npx tsx tests/android/server.ts',
     url: 'http://localhost:3013/api/config',
     timeout: 240000,
     reuseExistingServer: false,

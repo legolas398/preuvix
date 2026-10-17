@@ -1,0 +1,22 @@
+body {
+  padding-top: var(--safe-area-inset-top, env(safe-area-inset-top, 0px));
+  padding-bottom: var(--safe-area-inset-bottom, env(safe-area-inset-bottom, 0px));
+}
+.native-notice {
+  position: fixed;
+  bottom: max(18px, env(safe-area-inset-bottom));
+  left: 12px;
+  right: 12px;
+  z-index: 10000;
+  padding: 16px;
+  border-radius: 12px;
+  background: #172c2a;
+  color: #fff;
+  box-shadow: 0 4px 24px #0004;
+}
+.native-notice button {
+  margin-left: 12px;
+}
+.native-drafts {
+  padding: 12px;
+}

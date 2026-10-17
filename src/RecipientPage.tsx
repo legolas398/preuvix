@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { PrivateImage, PrivateVideo } from './PrivateMedia';
 import {
   ArrowDownToLine,
   CheckCheck,
@@ -69,9 +70,12 @@ export default function RecipientPage({ token }: { token: string }) {
             </p>
             <div className="recipient-media">
               {manifest.file.mime.startsWith('video/') ? (
-                <video src={`${base}/original`} controls playsInline preload="metadata" />
+                <PrivateVideo src={`${base}/original`} controls playsInline preload="metadata" />
               ) : (
-                <img src={`${base}/original`} alt={`Original du dossier ${shortId(proof.id)}`} />
+                <PrivateImage
+                  src={`${base}/original`}
+                  alt={`Original du dossier ${shortId(proof.id)}`}
+                />
               )}
             </div>
             <div className="recipient-downloads">

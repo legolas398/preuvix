@@ -1,10 +1,11 @@
+import { appFetch } from './transport';
 import { useCallback, useEffect, useState } from 'react';
 import { ArrowRight, Check, CreditCard, RefreshCw, ShieldCheck } from 'lucide-react';
 import type { BillingPlan, BillingStatus } from '../shared/billing';
 import './billing.css';
 
 async function billingApi<T>(path: string, body?: unknown): Promise<T> {
-  const response = await fetch(
+  const response = await appFetch(
     `/api/billing/${path}`,
     body === undefined
       ? {}

@@ -1,8 +1,11 @@
 import type { LocationSample } from '../shared/capture';
+import { Capacitor } from '@capacitor/core';
 
 // A single fresh reading, never a background location watch.
 export function readCaptureLocation(enabled: boolean): Promise<LocationSample> {
   if (!enabled) return Promise.resolve({ status: 'not_requested' });
+  if (Capacitor.isNativePlatform())
+    return import('./mobile/device').then(({ readLocation }) => readLocation());
   if (!navigator.geolocation) return Promise.resolve({ status: 'unavailable' });
   return new Promise((resolve) => {
     let settled = false;

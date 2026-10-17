@@ -1,3 +1,4 @@
+import { appFetch } from './transport';
 export class ApiError extends Error {
   constructor(
     message: string,
@@ -9,7 +10,7 @@ export class ApiError extends Error {
 export async function api<T>(url: string, options: RequestInit = {}): Promise<T> {
   let res: Response;
   try {
-    res = await fetch(url, {
+    res = await appFetch(url, {
       ...options,
       signal: options.signal ?? AbortSignal.timeout(30000),
       headers: {

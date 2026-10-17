@@ -453,8 +453,9 @@ export default function Welcome({ children }: { children: ReactNode }) {
               <span className="plan-label">VERSION DE TEST · ANDROID</span>
               <h3>L’application Android</h3>
               <p>
-                Capturez sur le téléphone, retrouvez vos dossiers et partagez vos exports dans une
-                application de votre choix.
+                Retrouvez les mêmes écrans et outils que sur le site : captures, preuves, dossiers,
+                vérification, transmission et annuaire. Enregistrez ou partagez vos exports depuis
+                le téléphone.
               </p>
               <p>
                 Les captures engagées en ligne sont conservées en brouillon pour reprendre un envoi.
@@ -462,7 +463,7 @@ export default function Welcome({ children }: { children: ReactNode }) {
               </p>
               <p>
                 Application en cours de validation sur téléphone, pas encore distribuée sur Google
-                Play. Pour les exports de plus de 32 Mo, utilisez le site web.
+                Play. Les services disponibles sont les mêmes que sur votre espace web.
               </p>
               <p>
                 Une mise à jour de l’application doit être installée sur le téléphone. Les

@@ -1,3 +1,4 @@
+import { publicOrigin } from './transport';
 import { useEffect, useRef, useState } from 'react';
 import type { Proof } from '../shared/types';
 import {
@@ -201,7 +202,7 @@ export default function TransmissionWorkspace({
         `/api/transmissions/${draft!.id}/link`,
         { method: 'POST', body: JSON.stringify({ revision: draft!.revision, confirmed }) },
       );
-      setUrl(location.origin + result.url);
+      setUrl(publicOrigin() + result.url);
       setInspected(result.transmission);
       setDraft(null);
       await refresh();

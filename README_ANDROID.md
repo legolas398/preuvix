@@ -1,4 +1,9 @@
-# Preuvix Android — première version
+# Preuvix Android
+
+**Mise à jour :** l’application utilise maintenant les mêmes écrans que le site.
+Voir [la parité Android/site](docs/android-parite-site.md) pour l’architecture actuelle
+et la conservation des anciens brouillons. L’audit de la première version ci-dessous
+décrit l’ancienne interface réduite.
 
 **Essai USB sur ce PC :** utiliser [le mode d'emploi détaillé](docs/test-android-usb.md), puis double-cliquer sur `Tester-Preuvix-USB.cmd`. Le lanceur utilise un serveur isolé sur le port **3016**, vérifie l'APK, crée le tunnel USB, installe et ouvre l'application. Le [compte rendu USB](docs/validation-android-usb.md) distingue les contrôles exécutés de la validation physique restante.
 

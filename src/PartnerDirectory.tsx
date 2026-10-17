@@ -1,3 +1,4 @@
+import { appFetch } from './transport';
 import { lazy, Suspense, useEffect, useRef, useState } from 'react';
 import { ArrowDownToLine, ArrowUpRight, MapPin, Search, Scale, X } from 'lucide-react';
 import { z } from 'zod';
@@ -26,7 +27,7 @@ export default function PartnerDirectory() {
     const controller = new AbortController();
     setLoading(true);
     setError('');
-    fetch('/api/partners', { signal: controller.signal })
+    appFetch('/api/partners', { signal: controller.signal })
       .then(async (response) => {
         if (!response.ok) throw new Error();
         const data = z.object({ partners: z.array(partnerSchema) }).parse(await response.json());

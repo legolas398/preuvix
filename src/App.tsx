@@ -1,3 +1,5 @@
+import { PrivateImage, PrivateVideo } from './PrivateMedia';
+import { publicOrigin } from './transport';
 import { lazy, useEffect, useRef, useState, type FormEvent, type ReactNode } from 'react';
 import {
   ArrowDownToLine,
@@ -90,6 +92,17 @@ function Status({ proof }: { proof: Pick<Proof, 'status'> }) {
   );
 }
 export default function App() {
+  const [, setRoute] = useState(0);
+  useEffect(() => {
+    const navigate = () => setRoute((value) => value + 1);
+    const expire = () => setConfig((value) => (value ? { ...value, authenticated: false } : value));
+    window.addEventListener('popstate', navigate);
+    window.addEventListener('preuvix-session-expired', expire);
+    return () => {
+      window.removeEventListener('popstate', navigate);
+      window.removeEventListener('preuvix-session-expired', expire);
+    };
+  }, []);
   const [config, setConfig] = useState<AppConfig | null>(null);
   const [error, setError] = useState('');
   const dossierToken = window.location.pathname.match(
@@ -275,6 +288,24 @@ function Workspace({ config, onLogout }: { config: AppConfig; onLogout: () => Pr
   const [initialCase, setInitialCase] = useState<DraftCase | undefined>();
   const caseCapture = useRef<((proof: Proof) => Promise<void>) | null>(null);
   const [selected, setSelected] = useState<Proof | null>(null);
+  useEffect(() => {
+    const back = (event: Event) => {
+      // A modal owns its close/save behavior; do not discard an active capture.
+      if (creating) {
+        event.preventDefault();
+        return;
+      }
+      if (selected) {
+        event.preventDefault();
+        setSelected(null);
+      } else if (tab !== 'cases') {
+        event.preventDefault();
+        setTab('cases');
+      }
+    };
+    window.addEventListener('preuvix-back', back);
+    return () => window.removeEventListener('preuvix-back', back);
+  }, [creating, selected, tab]);
   const refresh = async () => {
     const data = await api<{ proofs: Proof[]; usedBytes: number }>('/api/proofs');
     setProofs(data.proofs);
@@ -544,7 +575,11 @@ function Workspace({ config, onLogout }: { config: AppConfig; onLogout: () => Pr
                           ) : proof.manifest.file.mime.startsWith('video/') ? (
                             <span aria-label="Vidéo">▶</span>
                           ) : (
-                            <img src={`/api/proofs/${proof.id}/original`} alt="" loading="lazy" />
+                            <PrivateImage
+                              src={`/api/proofs/${proof.id}/original`}
+                              alt=""
+                              loading="lazy"
+                            />
                           )}
                           <div>
                             <strong>{proof.manifest.title}</strong>
@@ -753,14 +788,18 @@ function ProofDetail({
           {proof.manifest.file.mime === 'application/pdf' ? (
             <a href={`/api/proofs/${proof.id}/original`}>Télécharger le document PDF original</a>
           ) : proof.manifest.file.mime.startsWith('video/') ? (
-            <video
+            <PrivateVideo
               src={`/api/proofs/${proof.id}/original`}
               controls
               playsInline
               preload="metadata"
             />
           ) : (
-            <img src={`/api/proofs/${proof.id}/original`} alt={proof.manifest.title} decoding="async" />
+            <PrivateImage
+              src={`/api/proofs/${proof.id}/original`}
+              alt={proof.manifest.title}
+              decoding="async"
+            />
           )}
           <span>
             <LockKeyhole size={12} /> ORIGINAL PRIVÉ
@@ -1001,14 +1040,14 @@ function ProofDetail({
             <>
               <div className="share-url">
                 <code>
-                  {location.origin}/verification/{proof.shareToken}
+                  {publicOrigin()}/verification/{proof.shareToken}
                 </code>
                 <button
                   className="icon-button"
                   aria-label="Copier le lien"
                   onClick={() =>
                     navigator.clipboard
-                      .writeText(`${location.origin}/verification/${proof.shareToken}`)
+                      .writeText(`${publicOrigin()}/verification/${proof.shareToken}`)
                       .then(() => setCopied(true))
                       .catch(() =>
                         setError('Copie indisponible. Sélectionnez le lien pour le copier.'),

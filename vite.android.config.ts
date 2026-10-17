@@ -27,7 +27,7 @@ export default defineConfig(({ mode }) => {
               )
               .replace(
                 '<meta charset="UTF-8" />',
-                `<meta charset="UTF-8" /><meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self' ${url}; object-src 'none'; base-uri 'self'; form-action 'self'">`,
+                `<meta charset="UTF-8" /><meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://tile.openstreetmap.org https://*.tile.openstreetmap.org; media-src 'self' blob:; connect-src 'self' ${url}; font-src 'self' data:; worker-src 'self' blob:; object-src 'none'; base-uri 'self'; form-action 'self'">`,
               ),
         },
         generateBundle() {

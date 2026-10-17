@@ -1,3 +1,5 @@
+import { saveBlob } from './download';
+import { appFetch } from './transport';
 import { useEffect, useRef, useState } from 'react';
 import { ArrowDownToLine, FileCheck2 } from 'lucide-react';
 
@@ -14,7 +16,7 @@ export default function ProofDownloads({ proofId }: { proofId: string }) {
     setError('');
     const timeout = window.setTimeout(() => controller.abort(), 90000);
     try {
-      const response = await fetch(`/api/proofs/${proofId}/${kind}`, {
+      const response = await appFetch(`/api/proofs/${proofId}/${kind}`, {
         credentials: 'same-origin',
         cache: 'no-store',
         signal: controller.signal,
@@ -32,14 +34,7 @@ export default function ProofDownloads({ proofId }: { proofId: string }) {
         throw new Error('Le serveur n’a pas retourné le document attendu. Réessayez.');
       const blob = await response.blob();
       if (controller.signal.aborted) return;
-      const url = URL.createObjectURL(blob);
-      const link = document.createElement('a');
-      link.href = url;
-      link.download = `preuvix-${proofId}.${kind === 'report' ? 'pdf' : 'zip'}`;
-      document.body.append(link);
-      link.click();
-      link.remove();
-      window.setTimeout(() => URL.revokeObjectURL(url), 30000);
+      await saveBlob(blob, `preuvix-${proofId}.${kind === 'report' ? 'pdf' : 'zip'}`);
     } catch (e) {
       setError(
         controller.signal.aborted

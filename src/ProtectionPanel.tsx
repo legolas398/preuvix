@@ -1,3 +1,5 @@
+import { saveBlob } from './download';
+import { appFetch } from './transport';
 import { useState } from 'react';
 import { ArrowDownToLine, LoaderCircle, ScanSearch, ShieldCheck, Upload } from 'lucide-react';
 import type { Proof } from '../shared/types';
@@ -30,16 +32,9 @@ export default function ProtectionPanel({
     setBusy('copy');
     setError('');
     try {
-      const response = await fetch(`/api/proofs/${proof.id}/protected-copy`);
+      const response = await appFetch(`/api/proofs/${proof.id}/protected-copy`);
       if (!response.ok) throw new Error((await response.json()).error);
-      const url = URL.createObjectURL(await response.blob());
-      const link = document.createElement('a');
-      link.href = url;
-      link.download = `preuvix-copie-protegee-${shortId(proof.id)}.jpg`;
-      document.body.append(link);
-      link.click();
-      link.remove();
-      window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+      await saveBlob(await response.blob(), `preuvix-copie-protegee-${shortId(proof.id)}.jpg`);
       await onChange();
     } catch (e) {
       setError((e as Error).message || 'Copie protégée indisponible.');

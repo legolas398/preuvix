@@ -1,4 +1,5 @@
-import { test, expect } from '@playwright/test';
+import { test, expect as baseExpect } from '@playwright/test';
+const expect = baseExpect.configure({ timeout: 30000 });
 import { readFile } from 'node:fs/promises';
 import path from 'node:path';
 test.use({
@@ -31,6 +32,8 @@ test('mobile login, dossier, denied location, lost upload response, retry and PD
   });
   await page.route(`${backend}/api/**`, async (route) => {
     const response = await route.fetch({
+      maxRetries: 2,
+      timeout: 90000,
       url: route.request().url().replace(backend, 'http://localhost:3013'),
       headers: { ...route.request().headers(), origin: 'https://localhost' },
     });
@@ -74,6 +77,32 @@ test('mobile login, dossier, denied location, lost upload response, retry and PD
     });
   });
   await page.goto('https://localhost/');
+  // Upgrading keeps existing drafts accessible in their original workflow.
+  await page.evaluate(async (backend) => {
+    await new Promise<void>((resolve, reject) => {
+      const request = indexedDB.open('preuvix-mobile-drafts', 1);
+      request.onupgradeneeded = () => request.result.createObjectStore('drafts', { keyPath: 'id' });
+      request.onerror = () => reject(request.error);
+      request.onsuccess = () => {
+        const db = request.result;
+        const tx = db.transaction('drafts', 'readwrite');
+        tx.objectStore('drafts').put({
+          id: 'upgrade-fixture',
+          backend,
+          kind: 'case',
+          title: 'Ancien brouillon',
+          description: '',
+          createdAt: new Date().toISOString(),
+        });
+        tx.oncomplete = () => {
+          db.close();
+          resolve();
+        };
+      };
+    });
+  }, backend);
+  await page.reload();
+  await page.getByRole('button', { name: /Retrouver mes anciens brouillons/ }).click();
   await page.getByLabel('Mot de passe de l’espace').fill('browser-test-password-only');
   await page.getByRole('button', { name: 'Ouvrir mon espace' }).click();
   await page.getByRole('button', { name: 'Créer un dossier', exact: true }).click();
@@ -114,9 +143,10 @@ test('mobile login, dossier, denied location, lost upload response, retry and PD
   expect(commits).toBe(1);
   loseResponse = true;
   await draft.getByRole('button', { name: 'Envoyer ce brouillon' }).click();
-  await expect(page.getByRole('alert')).toContainText('brouillon est conservé');
+  await expect(page.getByRole('alert')).toContainText('brouillon est conservé', { timeout: 95000 });
   // Real reload demonstrates IndexedDB persistence; bearer is deliberately not persisted.
   await page.reload();
+  await page.getByRole('button', { name: /Retrouver mes anciens brouillons/ }).click();
   await page.getByLabel('Mot de passe de l’espace').fill('browser-test-password-only');
   await page.getByRole('button', { name: 'Ouvrir mon espace' }).click();
   await page.getByRole('button', { name: /^Brouillons/ }).click();

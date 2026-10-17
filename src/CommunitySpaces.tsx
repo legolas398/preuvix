@@ -1,3 +1,4 @@
+import { appFetch } from './transport';
 import { useEffect, useState, type ComponentType } from 'react';
 import {
   ArrowRight,
@@ -88,7 +89,7 @@ export default function CommunitySpaces() {
   useEffect(() => {
     const controller = new AbortController();
     const load = async (url: string) => {
-      const response = await fetch(url, { signal: controller.signal });
+      const response = await appFetch(url, { signal: controller.signal });
       if (!response.ok) throw new Error();
       return response.json();
     };

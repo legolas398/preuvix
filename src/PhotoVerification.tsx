@@ -1,3 +1,4 @@
+import { saveBlob } from './download';
 import { useState } from 'react';
 import { zipSync, strToU8 } from 'fflate';
 import { api } from './api';
@@ -60,14 +61,10 @@ export default function PhotoVerification({
         'Original exclu pour confidentialité. Vérifier avec scripts/verify-photo-report.mjs : node scripts/verify-photo-report.mjs dossier-extrait original-photo [cle-publique-obtenue-independamment.pem]. Les octets de manifest.json doivent rester inchangés.',
       ),
     });
-    const url = URL.createObjectURL(
+    void saveBlob(
       new Blob([new Uint8Array(archive).buffer], { type: 'application/zip' }),
-    );
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = 'rapport-verification.zip';
-    a.click();
-    setTimeout(() => URL.revokeObjectURL(url), 1000);
+      'rapport-verification.zip',
+    ).catch((failure: Error) => setError(failure.message));
   }
   const r = response?.result;
   return (
